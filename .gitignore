@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.env
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+# GCP credentials (never commit these)
+*.json
+service-account*.json
+gcp-key*.json
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
