@@ -28,3 +28,7 @@ gcp-key*.json
 .terraform/
 *.tfstate
 *.tfstate.backup
+
+
+# Generated data files
+shared/data-generators/output/
