@@ -13,9 +13,10 @@ dbt_packages/
 logs/
 
 # GCP credentials (never commit these)
-*.json
 service-account*.json
 gcp-key*.json
+*-credentials.json
+*-key.json
 
 # macOS
 .DS_Store

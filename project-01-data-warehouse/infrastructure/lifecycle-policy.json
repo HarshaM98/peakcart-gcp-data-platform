@@ -1,0 +1,37 @@
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": {
+          "type": "SetStorageClass",
+          "storageClass": "NEARLINE"
+        },
+        "condition": {
+          "age": 30,
+          "matchesPrefix": ["raw/"],
+          "matchesStorageClass": ["STANDARD"]
+        }
+      },
+      {
+        "action": {
+          "type": "SetStorageClass",
+          "storageClass": "COLDLINE"
+        },
+        "condition": {
+          "age": 90,
+          "matchesPrefix": ["raw/"],
+          "matchesStorageClass": ["NEARLINE"]
+        }
+      },
+      {
+        "action": {
+          "type": "Delete"
+        },
+        "condition": {
+          "age": 365,
+          "matchesPrefix": ["raw/"]
+        }
+      }
+    ]
+  }
+}
