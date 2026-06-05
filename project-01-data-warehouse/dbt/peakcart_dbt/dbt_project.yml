@@ -1,0 +1,38 @@
+name: peakcart_dbt
+version: '1.0.0'
+config-version: 2
+
+profile: peakcart_dbt
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+log-path: "logs"
+target-path: "target"
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  peakcart_dbt:
+    staging:
+      +materialized: view
+      +schema: silver
+      +tags: ["staging", "silver"]
+
+    marts:
+      facts:
+        +materialized: table
+        +schema: gold
+        +tags: ["marts", "gold", "facts"]
+      dimensions:
+        +materialized: table
+        +schema: gold
+        +tags: ["marts", "gold", "dimensions"]
+
+vars:
+  peakcart_start_date: '2025-01-01'
