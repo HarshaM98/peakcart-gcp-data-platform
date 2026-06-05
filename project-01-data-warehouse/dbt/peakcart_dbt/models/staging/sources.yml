@@ -1,0 +1,170 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: harsha-data-platform
+    schema: peakcart_bronze
+    description: >
+      Raw data loaded from GCS into BigQuery Bronze layer.
+      Data is exactly as it arrived from source systems.
+      No transformations applied.
+      Loaded by load_bronze.sh using bq load.
+
+    config:
+      freshness:
+        warn_after: {count: 24, period: hour}
+        error_after: {count: 48, period: hour}
+      loaded_at_field: _loaded_at
+
+    tables:
+      - name: bronze_suppliers
+        description: >
+          Raw supplier data from PeakCart's procurement system.
+          Contains supplier details, region, and lead times.
+        columns:
+          - name: supplier_id
+            description: Unique identifier for each supplier.
+            tests:
+              - not_null
+          - name: name
+            description: Supplier company name.
+          - name: region
+            description: Geographic region the supplier operates in.
+          - name: lead_time_days
+            description: Average number of days from order to delivery.
+          - name: is_active
+            description: Whether the supplier is currently active.
+          - name: _loaded_at
+            description: Timestamp when this row was loaded into BigQuery.
+          - name: _source_file
+            description: GCS file path this row was loaded from.
+
+      - name: bronze_products
+        description: >
+          Raw product catalog from PeakCart's inventory system.
+          Contains product details, pricing, and supplier mapping.
+        columns:
+          - name: product_id
+            description: Unique identifier for each product.
+            tests:
+              - not_null
+          - name: name
+            description: Product display name.
+          - name: category
+            description: Top level product category.
+          - name: subcategory
+            description: Product subcategory within the category.
+          - name: price
+            description: Current product price in USD.
+          - name: supplier_id
+            description: Foreign key to bronze_suppliers.
+          - name: is_active
+            description: Whether the product is currently available.
+          - name: _loaded_at
+            description: Timestamp when this row was loaded into BigQuery.
+          - name: _source_file
+            description: GCS file path this row was loaded from.
+
+      - name: bronze_customers
+        description: >
+          Raw customer data from PeakCart's user management system.
+          Contains customer demographics and segmentation.
+        columns:
+          - name: customer_id
+            description: Unique identifier for each customer.
+            tests:
+              - not_null
+          - name: name
+            description: Customer full name. PII, handle with care.
+          - name: email
+            description: Customer email address. PII, handle with care.
+          - name: city
+            description: Customer city.
+          - name: state
+            description: Customer state abbreviation.
+          - name: signup_date
+            description: Date the customer created their account.
+          - name: segment
+            description: >
+              Customer segment assigned by marketing.
+              Values: Premium, Standard, Budget, New.
+          - name: _loaded_at
+            description: Timestamp when this row was loaded into BigQuery.
+          - name: _source_file
+            description: GCS file path this row was loaded from.
+
+      - name: bronze_orders
+        description: >
+          Raw order data from PeakCart's order management system.
+          Contains one row per order with status and financial totals.
+        columns:
+          - name: order_id
+            description: Unique identifier for each order.
+            tests:
+              - not_null
+          - name: customer_id
+            description: Foreign key to bronze_customers.
+          - name: order_date
+            description: Date the order was placed.
+          - name: delivery_date
+            description: Date the order was delivered or is expected.
+          - name: status
+            description: >
+              Current order status.
+              Values: placed, confirmed, packed, shipped,
+              delivered, cancelled, returned.
+          - name: total_amount
+            description: Total order value in USD including all items.
+          - name: _loaded_at
+            description: Timestamp when this row was loaded into BigQuery.
+          - name: _source_file
+            description: GCS file path this row was loaded from.
+
+      - name: bronze_order_items
+        description: >
+          Raw order line items from PeakCart's order management system.
+          Contains one row per product per order.
+        columns:
+          - name: order_item_id
+            description: Unique identifier for each order line item.
+            tests:
+              - not_null
+          - name: order_id
+            description: Foreign key to bronze_orders.
+          - name: product_id
+            description: Foreign key to bronze_products.
+          - name: quantity
+            description: Number of units ordered.
+          - name: unit_price
+            description: Price per unit at time of order in USD.
+          - name: discount
+            description: Discount rate applied, between 0 and 1.
+          - name: _loaded_at
+            description: Timestamp when this row was loaded into BigQuery.
+          - name: _source_file
+            description: GCS file path this row was loaded from.
+
+      - name: bronze_inventory_snapshots
+        description: >
+          Raw daily inventory snapshots from PeakCart's
+          warehouse management system.
+          Contains stock levels per product per warehouse per day.
+        columns:
+          - name: snapshot_id
+            description: Unique identifier for each snapshot record.
+            tests:
+              - not_null
+          - name: warehouse_id
+            description: Identifier for the warehouse location.
+          - name: product_id
+            description: Foreign key to bronze_products.
+          - name: snapshot_date
+            description: Date of the inventory snapshot.
+          - name: qty_on_hand
+            description: Total units physically in the warehouse.
+          - name: qty_reserved
+            description: Units reserved for pending orders.
+          - name: _loaded_at
+            description: Timestamp when this row was loaded into BigQuery.
+          - name: _source_file
+            description: GCS file path this row was loaded from.
