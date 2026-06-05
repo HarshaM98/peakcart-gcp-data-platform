@@ -23,14 +23,31 @@ load_table() {
   echo ""
   echo "Loading ${TABLE}..."
 
+  # Step 1: Load CSV into a temporary staging table
   bq load \
     --project_id="${PROJECT}" \
     --source_format=CSV \
     --schema="${SCHEMA_DIR}/${TABLE}.json" \
     --skip_leading_rows=1 \
     --replace \
-    "${DATASET}.${TABLE}" \
+    "${DATASET}.${TABLE}_stage" \
     "${GCS_PATH}/${FILE}"
+
+  # Step 2: Create final table with metadata columns from staging
+  bq query \
+    --project_id="${PROJECT}" \
+    --use_legacy_sql=false \
+    "CREATE OR REPLACE TABLE \`${PROJECT}.${DATASET}.${TABLE}\` AS
+     SELECT
+       *,
+       CURRENT_TIMESTAMP()        AS _loaded_at,
+       '${GCS_PATH}/${FILE}'      AS _source_file
+     FROM \`${PROJECT}.${DATASET}.${TABLE}_stage\`"
+
+  # Step 3: Drop the staging table
+  bq rm -f \
+    --project_id="${PROJECT}" \
+    "${DATASET}.${TABLE}_stage"
 
   echo "${TABLE} done."
 }
