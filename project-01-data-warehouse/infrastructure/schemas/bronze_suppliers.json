@@ -1,0 +1,7 @@
+[
+  { "name": "supplier_id",    "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "name",           "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "region",         "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "lead_time_days", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "is_active",      "type": "BOOLEAN", "mode": "NULLABLE" }
+]

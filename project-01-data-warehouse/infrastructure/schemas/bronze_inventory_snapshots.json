@@ -1,0 +1,8 @@
+[
+  { "name": "snapshot_id",   "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "warehouse_id",  "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "product_id",    "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "snapshot_date", "type": "DATE",    "mode": "NULLABLE" },
+  { "name": "qty_on_hand",   "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "qty_reserved",  "type": "INTEGER", "mode": "NULLABLE" }
+]

@@ -1,0 +1,9 @@
+[
+  { "name": "product_id",   "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "name",         "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "category",     "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "subcategory",  "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "price",        "type": "NUMERIC", "mode": "NULLABLE" },
+  { "name": "supplier_id",  "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "is_active",    "type": "BOOLEAN", "mode": "NULLABLE" }
+]

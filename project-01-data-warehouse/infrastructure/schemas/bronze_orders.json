@@ -1,0 +1,8 @@
+[
+  { "name": "order_id",      "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "customer_id",   "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "order_date",    "type": "DATE",    "mode": "NULLABLE" },
+  { "name": "delivery_date", "type": "DATE",    "mode": "NULLABLE" },
+  { "name": "status",        "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "total_amount",  "type": "NUMERIC", "mode": "NULLABLE" }
+]

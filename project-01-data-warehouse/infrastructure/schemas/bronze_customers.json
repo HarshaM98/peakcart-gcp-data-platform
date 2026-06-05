@@ -1,0 +1,9 @@
+[
+  { "name": "customer_id",  "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "name",         "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "email",        "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "city",         "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "state",        "type": "STRING",  "mode": "NULLABLE" },
+  { "name": "signup_date",  "type": "DATE",    "mode": "NULLABLE" },
+  { "name": "segment",      "type": "STRING",  "mode": "NULLABLE" }
+]
