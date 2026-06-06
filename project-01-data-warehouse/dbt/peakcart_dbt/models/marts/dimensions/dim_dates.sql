@@ -1,10 +1,3 @@
-{{
-    config(
-        materialized='table',
-        schema='gold'
-    )
-}}
-
 with date_spine as (
 
     select date
@@ -50,10 +43,6 @@ final as (
         extract(dayofweek from date) not in (1, 7)           as is_weekday,
 
         -- fiscal calendar (fiscal year starts February 1)
-        -- fiscal Q1 = Feb, Mar, Apr
-        -- fiscal Q2 = May, Jun, Jul
-        -- fiscal Q3 = Aug, Sep, Oct
-        -- fiscal Q4 = Nov, Dec, Jan
         case
             when extract(month from date) >= 2
             then extract(year from date)
