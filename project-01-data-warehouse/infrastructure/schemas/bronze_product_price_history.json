@@ -1,0 +1,8 @@
+[
+  { "name": "price_id",       "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "product_id",     "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "price",          "type": "NUMERIC", "mode": "NULLABLE" },
+  { "name": "effective_date", "type": "DATE",    "mode": "NULLABLE" },
+  { "name": "end_date",       "type": "DATE",    "mode": "NULLABLE" },
+  { "name": "change_reason",  "type": "STRING",  "mode": "NULLABLE" }
+]

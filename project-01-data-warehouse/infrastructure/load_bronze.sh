@@ -65,6 +65,7 @@ load_table "bronze_customers"            "customers.csv"
 load_table "bronze_orders"               "orders.csv"
 load_table "bronze_order_items"          "order_items.csv"
 load_table "bronze_inventory_snapshots"  "inventory_snapshots.csv"
+load_table "bronze_product_price_history" "product_price_history.csv"
 
 echo ""
 echo "All Bronze tables loaded successfully."
