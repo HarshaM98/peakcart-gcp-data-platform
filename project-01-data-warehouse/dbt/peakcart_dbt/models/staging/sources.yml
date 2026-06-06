@@ -168,3 +168,22 @@ sources:
             description: Timestamp when this row was loaded into BigQuery.
           - name: _source_file
             description: GCS file path this row was loaded from.
+
+      - name: bronze_product_price_history
+        description: >
+          Raw product price history loaded from GCS.
+          Each row represents one price period for a product.
+          end_date is NULL for the currently active price.
+        columns:
+          - name: price_id
+            description: Unique identifier for each price record
+          - name: product_id
+            description: Foreign key to bronze_products
+          - name: price
+            description: Product price for this period
+          - name: effective_date
+            description: Date this price became active
+          - name: end_date
+            description: Date this price was superseded, NULL if still active
+          - name: change_reason
+            description: Business reason for the price change
