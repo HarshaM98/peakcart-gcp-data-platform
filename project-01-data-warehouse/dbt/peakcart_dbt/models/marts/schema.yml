@@ -1,0 +1,189 @@
+version: 2
+
+models:
+  - name: dim_dates
+    description: >
+      Calendar dimension table covering 2024-01-01 to 2027-12-31.
+      Generated from GENERATE_DATE_ARRAY, no source data.
+      Fiscal year starts February 1.
+    columns:
+      - name: date_id
+        description: Integer surrogate key in YYYYMMDD format (e.g. 20250115)
+        tests:
+          - unique
+          - not_null
+      - name: date
+        description: The calendar date
+        tests:
+          - unique
+          - not_null
+      - name: fiscal_year
+        description: Fiscal year, starts February 1
+        tests:
+          - not_null
+      - name: is_weekend
+        description: True for Saturday and Sunday
+        tests:
+          - not_null
+
+  - name: dim_suppliers
+    description: >
+      Supplier dimension. SCD Type 1, simple overwrite.
+      One row per supplier with derived lead_time_tier column.
+    columns:
+      - name: supplier_id
+        description: Natural key from source system
+        tests:
+          - unique
+          - not_null
+      - name: supplier_name
+        description: Supplier name
+        tests:
+          - not_null
+      - name: lead_time_tier
+        description: Derived tier (fast/standard/slow/very_slow) based on lead_time_days
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['fast', 'standard', 'slow', 'very_slow']
+
+  - name: dim_products
+    description: >
+      Product dimension with SCD Type 2 price history.
+      One row per product per price period.
+      359 rows for 200 products.
+    columns:
+      - name: product_surrogate_key
+        description: MD5 hash of product_id + valid_from, unique per price period
+        tests:
+          - unique
+          - not_null
+      - name: product_id
+        description: Natural key from source system
+        tests:
+          - not_null
+      - name: price
+        description: Product price for this period
+        tests:
+          - not_null
+      - name: valid_from
+        description: Date this price period became active
+        tests:
+          - not_null
+      - name: valid_to
+        description: Date this price period ended. 9999-12-31 if still active.
+        tests:
+          - not_null
+      - name: is_current
+        description: True if this is the currently active price period
+        tests:
+          - not_null
+
+  - name: dim_customers
+    description: >
+      Customer dimension with SCD Type 2 history via dbt snapshot.
+      Tracks changes to segment, city, and state.
+      valid_from backdated to 2025-01-01 for initial load alignment.
+    columns:
+      - name: customer_surrogate_key
+        description: MD5 hash of customer_id + dbt_valid_from, unique per version
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Natural key from source system
+        tests:
+          - not_null
+      - name: segment
+        description: Customer segment at this point in time
+        tests:
+          - not_null
+      - name: valid_from
+        description: Date this customer version became active
+        tests:
+          - not_null
+      - name: valid_to
+        description: Date this version was superseded. 9999-12-31 if still active.
+        tests:
+          - not_null
+      - name: is_current
+        description: True if this is the current customer record
+        tests:
+          - not_null
+
+  - name: fact_orders
+    description: >
+      Order line item fact table. Grain is one row per order item.
+      Joins to dim_customers and dim_products using SCD Type 2 surrogate keys
+      to capture attributes at time of purchase.
+      14,800 rows from 15,000 order items (~200 unmatched on joins).
+    columns:
+      - name: order_item_surrogate_key
+        description: MD5 hash of order_item_id, unique per fact row
+        tests:
+          - unique
+          - not_null
+      - name: order_item_id
+        description: Natural key from source system
+        tests:
+          - unique
+          - not_null
+      - name: customer_surrogate_key
+        description: Foreign key to dim_customers at time of order
+        tests:
+          - not_null
+      - name: product_surrogate_key
+        description: Foreign key to dim_products at time of order
+        tests:
+          - not_null
+      - name: order_date_id
+        description: Foreign key to dim_dates
+        tests:
+          - not_null
+      - name: line_total
+        description: Revenue for this line item after discount
+        tests:
+          - not_null
+      - name: price_variance
+        description: current_price minus price_at_purchase. Positive means prices rose.
+        tests:
+          - not_null
+
+  - name: fact_daily_inventory
+    description: >
+      Daily inventory snapshot fact table.
+      Grain is one row per product per warehouse per day.
+      3,000 rows.
+    columns:
+      - name: inventory_surrogate_key
+        description: MD5 hash of snapshot_id, unique per fact row
+        tests:
+          - unique
+          - not_null
+      - name: snapshot_id
+        description: Natural key from source system
+        tests:
+          - unique
+          - not_null
+      - name: product_surrogate_key
+        description: Foreign key to dim_products current record
+        tests:
+          - not_null
+      - name: snapshot_date_id
+        description: Foreign key to dim_dates
+        tests:
+          - not_null
+      - name: qty_on_hand
+        description: Total units in warehouse on this date
+        tests:
+          - not_null
+      - name: qty_available
+        description: qty_on_hand minus qty_reserved
+        tests:
+          - not_null
+      - name: stock_status
+        description: Derived status (out_of_stock/critical/low/adequate)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['out_of_stock', 'critical', 'low', 'adequate']

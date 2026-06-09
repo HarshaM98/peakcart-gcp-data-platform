@@ -1,0 +1,190 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: >
+      Cleaned and deduplicated customer records from Bronze.
+      One row per customer. City and state parsed separately.
+    columns:
+      - name: customer_id
+        description: Unique customer identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: email
+        description: Lowercased and trimmed customer email
+      - name: segment
+        description: Customer segment, defaulted to unknown if NULL
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Budget', 'Premium', 'Standard', 'New']
+      - name: is_valid_email
+        description: True if email matches basic format check
+      - name: signup_date
+        description: Date customer signed up
+        tests:
+          - not_null
+
+  - name: stg_orders
+    description: >
+      Cleaned and deduplicated orders from Bronze.
+      One row per order. delivery_days derived column added.
+      Some orders have NULL customer_id from the source system,
+      flagged by has_customer_id quality column.
+    columns:
+      - name: order_id
+        description: Unique order identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Foreign key to stg_customers, NULL for unmatched orders
+      - name: status
+        description: Order status, lowercased
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['placed', 'confirmed', 'packed', 'shipped',
+                       'delivered', 'cancelled', 'returned']
+      - name: total_amount
+        description: Total order value
+        tests:
+          - not_null
+
+  - name: stg_order_items
+    description: >
+      Cleaned and deduplicated order line items from Bronze.
+      One row per order item. line_total derived column added.
+    columns:
+      - name: order_item_id
+        description: Unique order item identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: Foreign key to stg_orders
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: product_id
+        description: Foreign key to stg_products
+        tests:
+          - not_null
+      - name: quantity
+        description: Number of units ordered
+        tests:
+          - not_null
+      - name: line_total
+        description: quantity * unit_price * (1 - discount)
+        tests:
+          - not_null
+
+  - name: stg_products
+    description: >
+      Cleaned and deduplicated product records from Bronze.
+      One row per product. Category defaulted to uncategorized if NULL.
+    columns:
+      - name: product_id
+        description: Unique product identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: supplier_id
+        description: Foreign key to stg_suppliers, NULL for some products
+      - name: category
+        description: Product category, defaulted to uncategorized
+        tests:
+          - not_null
+      - name: price
+        description: Current product price
+        tests:
+          - not_null
+
+  - name: stg_suppliers
+    description: >
+      Cleaned and deduplicated supplier records from Bronze.
+      One row per supplier.
+    columns:
+      - name: supplier_id
+        description: Unique supplier identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: supplier_name
+        description: Supplier name, trimmed
+        tests:
+          - not_null
+      - name: region
+        description: Supplier region, defaulted to unknown
+        tests:
+          - not_null
+      - name: lead_time_days
+        description: Average lead time in days
+        tests:
+          - not_null
+
+  - name: stg_inventory_snapshots
+    description: >
+      Cleaned and deduplicated inventory snapshots from Bronze.
+      One row per snapshot. qty_available derived column added.
+    columns:
+      - name: snapshot_id
+        description: Unique snapshot identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: product_id
+        description: Foreign key to stg_products
+        tests:
+          - not_null
+      - name: warehouse_id
+        description: Warehouse identifier
+        tests:
+          - not_null
+      - name: snapshot_date
+        description: Date of the inventory snapshot
+        tests:
+          - not_null
+      - name: qty_on_hand
+        description: Total units in warehouse
+        tests:
+          - not_null
+      - name: qty_available
+        description: qty_on_hand minus qty_reserved
+        tests:
+          - not_null
+
+  - name: stg_product_price_history
+    description: >
+      Cleaned product price history with SCD Type 2 date ranges.
+      One row per product per price period.
+      NULL end_date replaced with 9999-12-31 sentinel value.
+    columns:
+      - name: price_id
+        description: Unique price record identifier, cast to STRING
+        tests:
+          - unique
+          - not_null
+      - name: product_id
+        description: Foreign key to stg_products
+        tests:
+          - not_null
+      - name: price
+        description: Product price for this period
+        tests:
+          - not_null
+      - name: valid_from
+        description: Date this price became active
+        tests:
+          - not_null
+      - name: valid_to
+        description: Date this price was superseded. 9999-12-31 if still active.
+        tests:
+          - not_null
+      - name: is_current
+        description: True if this is the currently active price
+        tests:
+          - not_null
