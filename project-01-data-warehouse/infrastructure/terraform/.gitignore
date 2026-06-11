@@ -1,0 +1,14 @@
+# Terraform state files (never commit these)
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+
+# Terraform working directory (downloaded providers, never commit)
+.terraform/
+
+# Variable files with real values (never commit these)
+terraform.tfvars
+
+# Crash logs
+crash.log
+crash.*.log
