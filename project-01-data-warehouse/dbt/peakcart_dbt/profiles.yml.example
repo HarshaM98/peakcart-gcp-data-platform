@@ -1,0 +1,33 @@
+# Copy this file to ~/.dbt/profiles.yml and fill in your values
+# Never commit the real profiles.yml, it contains credentials
+
+peakcart_dbt:
+  outputs:
+
+    # Local development: uses your personal gcloud OAuth credentials
+    dev:
+      type: bigquery
+      method: oauth
+      project: your-gcp-project-id        # e.g. harsha-data-platform
+      dataset: peakcart_silver             # dbt writes Silver views here
+      location: US-CENTRAL1
+      threads: 4
+      job_execution_timeout_seconds: 300
+      job_retries: 1
+      priority: interactive               # run immediately, on-demand pricing
+
+    # Production pipeline: uses a service account, not a personal account
+    # Run with: dbt run --target prod
+    prod:
+      type: bigquery
+      method: service-account-json
+      project: your-prod-gcp-project-id
+      dataset: peakcart_silver
+      location: US-CENTRAL1
+      threads: 16
+      job_execution_timeout_seconds: 900  # longer timeout for large models
+      job_retries: 2
+      priority: batch                     # cheaper for scheduled pipelines
+      keyfile_json: "{{ env_var('DBT_SA_KEY') }}"  # set as environment variable
+
+  target: dev                             # default to dev unless --target is passed
