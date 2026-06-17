@@ -1,0 +1,84 @@
+name: dbt CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'project-01-data-warehouse/dbt/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'project-01-data-warehouse/dbt/**'
+
+jobs:
+  dbt-ci:
+    name: Run dbt tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dbt
+        run: |
+          pip install dbt-bigquery==1.11.0
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up dbt profiles
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          mkdir -p ~/.dbt
+          echo "peakcart_dbt:
+            outputs:
+              ci:
+                type: bigquery
+                method: service-account-json
+                project: ${GCP_PROJECT_ID}
+                dataset: peakcart_silver
+                location: US-CENTRAL1
+                threads: 4
+                job_execution_timeout_seconds: 300
+                job_retries: 1
+                priority: batch
+                keyfile_json: '${GCP_SA_KEY}'
+            target: ci" > ~/.dbt/profiles.yml
+
+      - name: Install dbt packages
+        working-directory: project-01-data-warehouse/dbt/peakcart_dbt
+        run: dbt deps
+
+      - name: Compile dbt (generate artifacts for slim CI)
+        working-directory: project-01-data-warehouse/dbt/peakcart_dbt
+        run: dbt compile
+
+      - name: Run dbt build on modified models
+        working-directory: project-01-data-warehouse/dbt/peakcart_dbt
+        run: |
+          if [ -f ./target/manifest.json ]; then
+            echo "Running slim CI: modified models only"
+            dbt build --select state:modified+
+          else
+            echo "No prior state found: running full build"
+            dbt build
+          fi
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-artifacts
+          path: project-01-data-warehouse/dbt/peakcart_dbt/target/
+          retention-days: 7
