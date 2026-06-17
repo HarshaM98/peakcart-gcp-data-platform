@@ -45,7 +45,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['fast', 'standard', 'slow', 'very_slow']
+              arguments:
+                values: ['fast', 'standard', 'slow', 'very_slow']
 
   - name: dim_products
     description: >
@@ -186,4 +187,5 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['out_of_stock', 'critical', 'low', 'adequate']
+              arguments:
+                values: ['out_of_stock', 'critical', 'low', 'adequate']

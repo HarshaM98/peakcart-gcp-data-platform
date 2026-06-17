@@ -18,7 +18,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Budget', 'Premium', 'Standard', 'New']
+              arguments:
+                values: ['Budget', 'Premium', 'Standard', 'New']
       - name: is_valid_email
         description: True if email matches basic format check
       - name: signup_date
@@ -45,8 +46,9 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['placed', 'confirmed', 'packed', 'shipped',
-                       'delivered', 'cancelled', 'returned']
+              arguments:
+                values: ['placed', 'confirmed', 'packed', 'shipped',
+                         'delivered', 'cancelled', 'returned']
       - name: total_amount
         description: Total order value
         tests:
@@ -67,8 +69,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_orders')
-              field: order_id
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
       - name: product_id
         description: Foreign key to stg_products
         tests:
