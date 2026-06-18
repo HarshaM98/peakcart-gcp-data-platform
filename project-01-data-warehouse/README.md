@@ -1,3 +1,5 @@
+![dbt CI](https://github.com/HarshaM98/peakcart-gcp-data-platform/actions/workflows/dbt-ci.yml/badge.svg)
+
 # Project 1: PeakCart Data Warehouse
 
 A production-grade analytical data warehouse built on Google Cloud Platform
@@ -35,14 +37,16 @@ BigQuery Gold star schema, facts and dimensions, BI-ready
 
 ## Technologies
 
-| Tool                 | Purpose                                            |
-| -------------------- | -------------------------------------------------- |
-| Google Cloud Storage | Data lake, raw CSV storage with lifecycle policies |
-| BigQuery             | Data warehouse, all three Medallion layers         |
-| dbt Core 1.11        | All transformations, testing, documentation        |
-| dbt_utils 1.3.0      | Surrogate key generation                           |
-| Python 3.11          | Sample data generation                             |
-| Google Cloud SDK     | GCS upload, BigQuery load jobs                     |
+| Tool                 | Purpose                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| Google Cloud Storage | Data lake, raw CSV storage with lifecycle policies          |
+| BigQuery             | Data warehouse, all three Medallion layers                  |
+| dbt Core 1.11        | All transformations, testing, documentation                 |
+| dbt_utils 1.3.0      | Surrogate key generation                                    |
+| Python 3.11          | Sample data generation                                      |
+| Google Cloud SDK     | GCS upload, BigQuery load jobs                              |
+| Terraform 1.15       | Infrastructure as code for GCS bucket and BigQuery datasets |
+| GitHub Actions       | CI/CD pipeline running dbt build on every push              |
 
 ---
 
@@ -131,6 +135,16 @@ cd project-01-data-warehouse/dbt/peakcart_dbt
 dbt debug
 ```
 
+### Setting up profiles.yml
+
+```bash
+# Copy the example file and fill in your GCP project ID
+cp profiles.yml.example ~/.dbt/profiles.yml
+
+# Edit with your project ID
+code ~/.dbt/profiles.yml
+```
+
 ### Full pipeline run
 
 ```bash
@@ -167,6 +181,35 @@ dbt test
 dbt run --full-refresh
 dbt test
 ```
+
+---
+
+## Infrastructure
+
+All GCP infrastructure is managed as Terraform code.
+
+```bash
+cd project-01-data-warehouse/infrastructure/terraform
+
+# First time only: create remote state bucket
+./bootstrap.sh
+
+# Initialize Terraform
+terraform init
+
+# Preview changes
+terraform plan
+
+# Apply changes
+terraform apply
+```
+
+Resources managed:
+
+- GCS bucket `peakcart-data-lake-2026` with lifecycle policies
+- BigQuery datasets: `peakcart_bronze`, `peakcart_silver`, `peakcart_gold`, `peakcart_snapshots`
+- IAM bindings for each dataset
+- Remote state stored in `gs://peakcart-terraform-state-2026`
 
 ---
 
@@ -229,6 +272,37 @@ Column-level security on PII fields (email, address) implemented in
 Project 6 (Governance and AI).
 
 ---
+
+## Production Considerations
+
+Things deliberately simplified in this portfolio that a production deployment would handle differently:
+
+**Infrastructure**
+
+- Terraform workspaces separating dev, staging, and prod environments
+- Separate GCP projects per environment to isolate billing and access
+- Terraform runs via CI/CD pipeline rather than manually from a laptop
+
+**Ingestion**
+
+- Dataflow pipeline replacing the `load_bronze.sh` script, adding metadata before data reaches BigQuery rather than via the stage-and-replace workaround
+- CDC via Datastream for near-real-time ingestion from operational databases
+
+**Transformation**
+
+- dbt Cloud or Cloud Composer for scheduled pipeline runs rather than manual execution
+- Slim CI using `state:modified+` already implemented via GitHub Actions
+
+**Security**
+
+- Column-level security on PII fields via BigQuery policy tags (covered in Project 6)
+- Secret Manager for all credentials rather than environment variables
+- Separate service accounts per pipeline with least-privilege permissions
+
+**Snapshots**
+
+- dbt snapshots initialized before any historical data exists, so `dbt_valid_from` reflects true history rather than the snapshot run date
+- In this portfolio, `valid_from` was backdated via a direct BigQuery UPDATE to align with order history start date
 
 _Part of the PeakCart GCP Data Platform portfolio._
 _Built by Harsha Manjunatha | June 2026 | harsha-data-platform (GCP)_
