@@ -1,0 +1,11 @@
+[
+  {"name": "feedback_id",      "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "order_id",         "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "customer_id",      "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "delivery_date",    "type": "DATE",      "mode": "NULLABLE"},
+  {"name": "driver_rating",    "type": "INTEGER",   "mode": "NULLABLE"},
+  {"name": "delivery_rating",  "type": "INTEGER",   "mode": "NULLABLE"},
+  {"name": "comment",          "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "issue_type",       "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "would_recommend",  "type": "BOOLEAN",   "mode": "NULLABLE"}
+]

@@ -1,0 +1,11 @@
+[
+  {"name": "event_id",         "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "customer_id",      "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "session_id",       "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "event_type",       "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "product_id",       "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "page_url",         "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "search_query",     "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "event_timestamp",  "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "device_type",      "type": "STRING",    "mode": "NULLABLE"}
+]

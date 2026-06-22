@@ -1,0 +1,11 @@
+[
+  {"name": "customer_id",               "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "full_name",                 "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "email",                     "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "city",                      "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "state",                     "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "signup_date",               "type": "DATE",      "mode": "NULLABLE"},
+  {"name": "preferred_delivery_window", "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "dietary_preferences",       "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "is_active",                 "type": "BOOLEAN",   "mode": "NULLABLE"}
+]

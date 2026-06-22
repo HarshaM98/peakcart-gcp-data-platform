@@ -1,0 +1,13 @@
+[
+  {"name": "order_item_id",   "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "order_id",        "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "customer_id",     "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "product_id",      "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "order_date",      "type": "DATE",      "mode": "NULLABLE"},
+  {"name": "delivery_date",   "type": "DATE",      "mode": "NULLABLE"},
+  {"name": "order_status",    "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "quantity",        "type": "INTEGER",   "mode": "NULLABLE"},
+  {"name": "unit_price",      "type": "NUMERIC",   "mode": "NULLABLE"},
+  {"name": "discount",        "type": "NUMERIC",   "mode": "NULLABLE"},
+  {"name": "delivery_rating", "type": "INTEGER",   "mode": "NULLABLE"}
+]
