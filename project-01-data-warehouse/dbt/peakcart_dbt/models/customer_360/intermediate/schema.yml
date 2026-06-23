@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: int_clickstream_sessions
+    description: >
+      Sessionized clickstream events. One row per true session,
+      derived using LAG and cumulative SUM window functions.
+      Session boundary is 30 minutes of inactivity.
+    columns:
+      - name: true_session_id
+        description: "Primary key. MD5 hash of customer_id and session_number."
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Foreign key to stg_customer_profiles."
+        tests:
+          - not_null
+      - name: did_purchase
+        description: "True if any purchase event occurred in this session."
+        tests:
+          - not_null
+      - name: cart_abandoned
+        description: "True if add_to_cart occurred but no purchase in session."
+        tests:
+          - not_null
+
+  - name: int_customer_order_metrics
+    description: >
+      Per-customer order aggregates from stg_order_history.
+      One row per customer. Spend metrics on delivered orders only.
+    columns:
+      - name: customer_id
+        description: "Primary key. One row per customer."
+        tests:
+          - unique
+          - not_null
+      - name: total_orders
+        description: "Total orders placed including cancelled and in_transit."
+        tests:
+          - not_null
+      - name: total_spend
+        description: "Total spend on delivered orders only."
+        tests:
+          - not_null
+
+  - name: int_customer_satisfaction
+    description: >
+      Per-customer satisfaction aggregates from stg_delivery_feedback.
+      Only 741 of 1000 customers have feedback. Remaining 259 are
+      correctly absent and handled with has_no_feedback flag in Gold.
+    columns:
+      - name: customer_id
+        description: "Primary key. One row per customer with feedback."
+        tests:
+          - unique
+          - not_null
+      - name: nps_bucket
+        description: "NPS classification based on recommendation rate."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['promoter', 'passive', 'detractor']

@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: customer_360
+    description: >
+      Unified customer profile joining demographics, order history,
+      session behavior, and delivery satisfaction into one row per customer.
+      Primary analytical model for Customer 360 use cases.
+    columns:
+      - name: customer_id
+        description: "Primary key. One row per customer."
+        tests:
+          - unique
+          - not_null
+      - name: rfm_segment
+        description: "RFM segment label based on recency, frequency, monetary scores."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['champion', 'loyal', 'potential',
+                         'new_customer', 'at_risk', 'lost']
+      - name: rfm_score
+        description: "Three digit RFM score string e.g. 555 for champions."
+        tests:
+          - not_null
+      - name: customer_cohort
+        description: "Customer tenure bucket based on signup date."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['new', 'established', 'veteran']
+      - name: total_orders
+        description: "Total orders placed. 0 if no orders."
+        tests:
+          - not_null
+      - name: total_spend
+        description: "Total spend on delivered orders. 0 if no delivered orders."
+        tests:
+          - not_null
+      - name: has_no_feedback
+        description: "True if customer has never submitted delivery feedback."
+        tests:
+          - not_null
+      - name: model_updated_at
+        description: "Timestamp when this Gold table was last rebuilt."
+        tests:
+          - not_null
