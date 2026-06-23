@@ -1,0 +1,166 @@
+version: 2
+
+models:
+  - name: stg_customer_profiles
+    description: "Cleaned and typed customer demographic data from Bronze"
+    columns:
+      - name: customer_id
+        description: "Primary key. Unique customer identifier."
+        tests:
+          - unique
+          - not_null
+      - name: email
+        description: "Customer email. 2% null by design (dirty data simulation)."
+        tests:
+          - not_null:
+              severity: warn
+      - name: signup_date
+        description: "Date customer signed up. Must be on or before today."
+        tests:
+          - not_null
+      - name: preferred_delivery_window
+        description: "Customer preferred delivery time window."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['morning', 'afternoon', 'evening']
+      - name: dietary_preferences
+        description: "Customer dietary preferences."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['none', 'vegetarian', 'vegan', 'gluten-free']
+      - name: is_valid_email
+        description: "True if email is non-null and contains @ and ."
+        tests:
+          - not_null
+      - name: is_active
+        description: "False for churned customers (5% of base)."
+        tests:
+          - not_null
+
+  - name: stg_order_history
+    description: "Cleaned and typed order and order item data from Bronze"
+    columns:
+      - name: order_item_id
+        description: "Primary key. Unique per order line item."
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Order identifier. Multiple items share the same order_id."
+        tests:
+          - not_null
+      - name: customer_id
+        description: "Foreign key to stg_customer_profiles."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customer_profiles')
+                field: customer_id
+      - name: order_status
+        description: "Current status of the order."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['delivered', 'cancelled', 'in_transit']
+      - name: quantity
+        description: "Item quantity. Negative values represent returns (0.5%)."
+        tests:
+          - not_null
+      - name: unit_price
+        description: "Price per unit at time of order."
+        tests:
+          - not_null
+      - name: line_total
+        description: "quantity * unit_price * (1 - discount)"
+        tests:
+          - not_null
+      - name: is_valid_delivery_date
+        description: "True if delivery_date >= order_date."
+        tests:
+          - not_null
+
+  - name: stg_clickstream_events
+    description: "Cleaned clickstream events from web and mobile"
+    columns:
+      - name: event_id
+        description: "Primary key. UUID per event."
+        tests:
+          - unique
+          - not_null
+      - name: event_type
+        description: "Type of user interaction."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['page_view', 'product_view', 'add_to_cart',
+                         'search', 'purchase', 'remove_from_cart']
+      - name: event_timestamp
+        description: "UTC timestamp of the event. ISO 8601 format."
+        tests:
+          - not_null
+      - name: device_type
+        description: "Device used for the session."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['mobile', 'desktop', 'tablet']
+      - name: is_valid_event_type
+        description: "True if event_type is in the allowed list."
+        tests:
+          - not_null
+
+  - name: stg_delivery_feedback
+    description: "Cleaned delivery feedback and ratings from Bronze"
+    columns:
+      - name: feedback_id
+        description: "Primary key. Unique per feedback submission."
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Foreign key to stg_order_history."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_order_history')
+                field: order_id
+      - name: customer_id
+        description: "Foreign key to stg_customer_profiles."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customer_profiles')
+                field: customer_id
+      - name: driver_rating
+        description: "Driver rating 1 to 5."
+        tests:
+          - not_null
+      - name: delivery_rating
+        description: "Delivery experience rating 1 to 5."
+        tests:
+          - not_null
+      - name: issue_type
+        description: "Type of issue reported. none if no issue."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['none', 'late', 'damaged',
+                         'wrong_items', 'missing_items']
+      - name: is_valid_driver_rating
+        description: "True if driver_rating is between 1 and 5."
+        tests:
+          - not_null
+      - name: is_valid_delivery_rating
+        description: "True if delivery_rating is between 1 and 5."
+        tests:
+          - not_null

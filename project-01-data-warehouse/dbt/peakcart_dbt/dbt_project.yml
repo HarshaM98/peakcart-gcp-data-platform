@@ -34,6 +34,20 @@ models:
         +schema: gold
         +tags: ["marts", "gold", "dimensions"]
 
+    customer_360:
+      staging:
+        +materialized: view
+        +schema: silver
+        +tags: ['staging', 'silver', 'customer_360']
+      intermediate:
+        +materialized: view
+        +schema: silver
+        +tags: ['intermediate', 'silver', 'customer_360']
+      gold:
+        +materialized: table
+        +schema: gold
+        +tags: ['gold', 'customer_360']
+            
 vars:
   peakcart_start_date: '2025-01-01'
 

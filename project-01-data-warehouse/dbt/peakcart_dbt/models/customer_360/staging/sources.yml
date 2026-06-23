@@ -1,0 +1,26 @@
+version: 2
+
+sources:
+  - name: bronze_p03
+    database: harsha-data-platform
+    schema: peakcart_bronze
+    description: "Project 03 raw Bronze tables loaded from GCS CSVs"
+
+    freshness:
+      warn_after: {count: 24, period: hour}
+      error_after: {count: 48, period: hour}
+
+    loaded_at_field: _loaded_at
+
+    tables:
+      - name: bronze_customer_profiles
+        description: "Raw customer demographic data"
+
+      - name: bronze_order_history
+        description: "Raw order and order item data"
+
+      - name: bronze_clickstream_events
+        description: "Raw clickstream events from web and mobile"
+
+      - name: bronze_delivery_feedback
+        description: "Raw delivery feedback and ratings"
