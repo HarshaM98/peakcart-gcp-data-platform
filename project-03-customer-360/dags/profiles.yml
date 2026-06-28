@@ -1,0 +1,13 @@
+peakcart_dbt:
+  outputs:
+    prod:
+      type: bigquery
+      method: oauth
+      project: harsha-data-platform
+      dataset: peakcart_silver
+      location: US-CENTRAL1
+      threads: 4
+      job_execution_timeout_seconds: 300
+      job_retries: 1
+      priority: batch
+  target: prod

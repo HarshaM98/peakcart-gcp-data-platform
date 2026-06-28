@@ -60,5 +60,4 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['promoter', 'passive', 'detractor']
+              values: ['promoter', 'passive', 'detractor']

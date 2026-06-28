@@ -17,9 +17,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['champion', 'loyal', 'potential',
-                         'new_customer', 'at_risk', 'lost']
+              values: ['champion', 'loyal', 'potential',
+                       'new_customer', 'at_risk', 'lost']
       - name: rfm_score
         description: "Three digit RFM score string e.g. 555 for champions."
         tests:
@@ -29,8 +28,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['new', 'established', 'veteran']
+              values: ['new', 'established', 'veteran']
       - name: total_orders
         description: "Total orders placed. 0 if no orders."
         tests:

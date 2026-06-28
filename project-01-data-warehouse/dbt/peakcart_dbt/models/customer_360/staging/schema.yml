@@ -23,14 +23,12 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['morning', 'afternoon', 'evening']
+              values: ['morning', 'afternoon', 'evening']
       - name: dietary_preferences
         description: "Customer dietary preferences."
         tests:
           - accepted_values:
-              arguments:
-                values: ['none', 'vegetarian', 'vegan', 'gluten-free']
+              values: ['none', 'vegetarian', 'vegan', 'gluten-free']
       - name: is_valid_email
         description: "True if email is non-null and contains @ and ."
         tests:
@@ -57,16 +55,14 @@ models:
         tests:
           - not_null
           - relationships:
-              arguments:
-                to: ref('stg_customer_profiles')
-                field: customer_id
+              to: ref('stg_customer_profiles')
+              field: customer_id
       - name: order_status
         description: "Current status of the order."
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['delivered', 'cancelled', 'in_transit']
+              values: ['delivered', 'cancelled', 'in_transit']
       - name: quantity
         description: "Item quantity. Negative values represent returns (0.5%)."
         tests:
@@ -97,9 +93,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['page_view', 'product_view', 'add_to_cart',
-                         'search', 'purchase', 'remove_from_cart']
+              values: ['page_view', 'product_view', 'add_to_cart',
+                       'search', 'purchase', 'remove_from_cart']
       - name: event_timestamp
         description: "UTC timestamp of the event. ISO 8601 format."
         tests:
@@ -109,8 +104,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['mobile', 'desktop', 'tablet']
+              values: ['mobile', 'desktop', 'tablet']
       - name: is_valid_event_type
         description: "True if event_type is in the allowed list."
         tests:
@@ -129,17 +123,15 @@ models:
         tests:
           - not_null
           - relationships:
-              arguments:
-                to: ref('stg_order_history')
-                field: order_id
+              to: ref('stg_order_history')
+              field: order_id
       - name: customer_id
         description: "Foreign key to stg_customer_profiles."
         tests:
           - not_null
           - relationships:
-              arguments:
-                to: ref('stg_customer_profiles')
-                field: customer_id
+              to: ref('stg_customer_profiles')
+              field: customer_id
       - name: driver_rating
         description: "Driver rating 1 to 5."
         tests:
@@ -153,9 +145,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments:
-                values: ['none', 'late', 'damaged',
-                         'wrong_items', 'missing_items']
+              values: ['none', 'late', 'damaged',
+                       'wrong_items', 'missing_items']
       - name: is_valid_driver_rating
         description: "True if driver_rating is between 1 and 5."
         tests:
