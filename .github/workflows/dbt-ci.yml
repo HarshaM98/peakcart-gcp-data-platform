@@ -35,26 +35,33 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Set up dbt profiles
+      - name: Set up GCP credentials file
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          echo "$GCP_SA_KEY" > /tmp/gcp-key.json
+
+      - name: Set up dbt profiles
+        env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           mkdir -p ~/.dbt
-          echo "peakcart_dbt:
+          cat > ~/.dbt/profiles.yml << PROFILE_EOF
+          peakcart_dbt:
             outputs:
               ci:
                 type: bigquery
-                method: service-account-json
+                method: service-account
                 project: ${GCP_PROJECT_ID}
                 dataset: peakcart_silver
                 location: US-CENTRAL1
+                keyfile: /tmp/gcp-key.json
                 threads: 4
                 job_execution_timeout_seconds: 300
                 job_retries: 1
                 priority: batch
-                keyfile_json: '${GCP_SA_KEY}'
-            target: ci" > ~/.dbt/profiles.yml
+            target: ci
+          PROFILE_EOF
 
       - name: Install dbt packages
         working-directory: project-01-data-warehouse/dbt/peakcart_dbt
