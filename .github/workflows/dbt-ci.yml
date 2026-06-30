@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'project-01-data-warehouse/dbt/**'
+  workflow_dispatch: {}
 
 jobs:
   dbt-ci:
