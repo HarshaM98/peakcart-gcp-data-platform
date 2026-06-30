@@ -72,16 +72,11 @@ jobs:
         working-directory: project-01-data-warehouse/dbt/peakcart_dbt
         run: dbt compile
 
-      - name: Run dbt build on modified models
+      - name: Run dbt build
         working-directory: project-01-data-warehouse/dbt/peakcart_dbt
         run: |
-          if [ -f ./target/manifest.json ]; then
-            echo "Running slim CI: modified models only"
-            dbt build --select state:modified+
-          else
-            echo "No prior state found: running full build"
-            dbt build
-          fi
+          echo "Running full dbt build (slim CI disabled until state artifact caching is set up)"
+          dbt build
 
       - name: Upload dbt artifacts
         if: always()
