@@ -1,0 +1,10 @@
+{
+  "delivery_id": "D5521",
+  "driver_id": "DR112",
+  "truck_id": "T07",
+  "event_type": "in_transit",
+  "lat": 40.7128,
+  "lng": -74.0060,
+  "timestamp": "2026-07-01T14:40:12Z",
+  "orders_on_truck": 18
+}

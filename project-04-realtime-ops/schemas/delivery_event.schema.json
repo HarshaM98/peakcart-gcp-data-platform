@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "delivery_event",
+  "description": "Tracks a delivery truck's movement and status.",
+  "type": "object",
+  "properties": {
+    "delivery_id": {
+      "type": "string",
+      "description": "Unique delivery identifier. Idempotency key for deduplication."
+    },
+    "driver_id": {
+      "type": "string",
+      "description": "Unique driver identifier."
+    },
+    "truck_id": {
+      "type": "string",
+      "description": "Unique truck identifier."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["departed", "in_transit", "arrived", "completed"],
+      "description": "Delivery lifecycle stage at the time this event was emitted."
+    },
+    "lat": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90,
+      "description": "Latitude at time of event."
+    },
+    "lng": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180,
+      "description": "Longitude at time of event."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event time (ISO 8601, UTC), not Pub/Sub publish time."
+    },
+    "orders_on_truck": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of orders currently loaded on this truck."
+    }
+  },
+  "required": ["delivery_id", "driver_id", "truck_id", "event_type", "timestamp"]
+}

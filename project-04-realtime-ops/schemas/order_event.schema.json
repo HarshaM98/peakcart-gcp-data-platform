@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "order_event",
+  "description": "Tracks an order's lifecycle through the fulfillment center.",
+  "type": "object",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "Unique order identifier. Used as the idempotency key for deduplication downstream."
+    },
+    "customer_id": {
+      "type": "string",
+      "description": "Unique customer identifier."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["placed", "picked", "packed", "shipped", "delivered"],
+      "description": "Lifecycle stage of the order at the time this event was emitted."
+    },
+    "warehouse_zone": {
+      "type": "string",
+      "description": "Fulfillment center zone that produced this event, e.g. zone_a, zone_b."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event time (ISO 8601, UTC). When the event actually happened in the real world, not when it was published to Pub/Sub."
+    },
+    "items_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of items in the order at this stage."
+    }
+  },
+  "required": ["order_id", "customer_id", "event_type", "timestamp"]
+}

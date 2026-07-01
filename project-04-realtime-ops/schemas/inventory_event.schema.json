@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "inventory_event",
+  "description": "Tracks stock movement at the warehouse and product level.",
+  "type": "object",
+  "properties": {
+    "warehouse_id": {
+      "type": "string",
+      "description": "Unique warehouse identifier."
+    },
+    "product_id": {
+      "type": "string",
+      "description": "Unique product identifier."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["received", "picked", "adjusted"],
+      "description": "Type of inventory movement."
+    },
+    "quantity_change": {
+      "type": "integer",
+      "description": "Change in quantity. Positive for received stock, negative for picked or adjusted-down stock."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event time (ISO 8601, UTC), not Pub/Sub publish time."
+    }
+  },
+  "required": ["warehouse_id", "product_id", "event_type", "quantity_change", "timestamp"]
+}
