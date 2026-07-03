@@ -1,0 +1,7 @@
+[
+  {"name": "window_start", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "window_end", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "warehouse_zone", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "order_count", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "pipeline_processed_at", "type": "TIMESTAMP", "mode": "REQUIRED"}
+]
