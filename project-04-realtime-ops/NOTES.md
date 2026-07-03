@@ -49,3 +49,5 @@ The malformed-events branch has no windowing, so it wrote rows to BigQuery immed
 
 **Gotchas/issues hit:**
 Of 260 order events published, only `missing_fields: ['warehouse_zone']` ever appeared in `malformed_events` (61 rows) — no `invalid_json` or `invalid_timestamp` rows. This is expected: `event_simulator.py`'s messiness model only ever drops the optional `warehouse_zone`/`items_count` fields or staggers timestamps into the past (still valid ISO strings); it never emits malformed JSON or a genuinely unparseable timestamp. Those two code paths are covered only by the unit tests, not by this live run.
+
+**Note — intentional test data in `malformed_events`:** The 61 rows from this 2026-07-03 test run were deliberately left in the live `peakcart_streaming.malformed_events` table (not deleted) as evidence the dead-letter path works end-to-end. All 61 rows have `error_reason = "missing_fields: ['warehouse_zone']"` and `processing_time` around 2026-07-03 17:02 UTC. If this table is ever inspected and these rows look like an unexplained data-quality issue, they are not — they're expected test output from this run, not real production traffic.
