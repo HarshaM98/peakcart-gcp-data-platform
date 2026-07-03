@@ -15,7 +15,7 @@ from apache_beam.transforms.window import FixedWindows, TimestampedValue
 
 PROJECT_ID = "harsha-data-platform"
 SUBSCRIPTION = f"projects/{PROJECT_ID}/subscriptions/peakcart-order-events-sub"
-MALFORMED_EVENTS_TABLE = f"{PROJECT_ID}:peakcart_realtime.malformed_events"
+MALFORMED_EVENTS_TABLE = f"{PROJECT_ID}:peakcart_streaming.malformed_events"
 
 REQUIRED_FIELDS = ["order_id", "customer_id", "event_type", "timestamp", "warehouse_zone"]
 
