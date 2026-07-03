@@ -51,3 +51,35 @@ The malformed-events branch has no windowing, so it wrote rows to BigQuery immed
 Of 260 order events published, only `missing_fields: ['warehouse_zone']` ever appeared in `malformed_events` (61 rows) — no `invalid_json` or `invalid_timestamp` rows. This is expected: `event_simulator.py`'s messiness model only ever drops the optional `warehouse_zone`/`items_count` fields or staggers timestamps into the past (still valid ISO strings); it never emits malformed JSON or a genuinely unparseable timestamp. Those two code paths are covered only by the unit tests, not by this live run.
 
 **Note — intentional test data in `malformed_events`:** The 61 rows from this 2026-07-03 test run were deliberately left in the live `peakcart_streaming.malformed_events` table (not deleted) as evidence the dead-letter path works end-to-end. All 61 rows have `error_reason = "missing_fields: ['warehouse_zone']"` and `processing_time` around 2026-07-03 17:02 UTC. If this table is ever inspected and these rows look like an unexplained data-quality issue, they are not — they're expected test output from this run, not real production traffic.
+
+---
+
+## 2026-07-03 - Write orders_per_minute to BigQuery (step5_write_to_bigquery.py)
+
+**What I built/changed:**
+Added `pipeline/step5_write_to_bigquery.py`, building on step4: replaced the well-formed branch's `Print` placeholder with `WriteToBigQuery` into the existing `orders_per_minute` table, and added the `pipeline_processed_at` field to `FormatWindowedCount`'s output since the table's schema requires it. The malformed branch is unchanged from step4.
+
+**Why this approach:**
+This was the last explicitly deferred piece from step3's docstring ("still printing results directly, no BigQuery write yet"). Both branches now write to real BigQuery tables using the same `WriteToBigQuery` pattern, so the pipeline's two outputs are handled symmetrically instead of one going to BigQuery and the other only to stdout.
+
+**Key concept to remember:**
+A schema mismatch here would only surface at write time, not at compile time — `FormatWindowedCount` had been silently missing `pipeline_processed_at` since step3 because nothing was writing its output to a schema-enforced sink yet. Adding a real `WriteToBigQuery` call is what exposed the gap.
+
+**Gotchas/issues hit:**
+None yet — this hasn't been run live against Pub/Sub/BigQuery yet, only syntax-checked with `py_compile`.
+
+---
+
+## 2026-07-03 - End-to-end test of step5_write_to_bigquery.py against live GCP
+
+**What I built/changed:**
+Ran `event_simulator.py --duration 1 --messiness 0.6` (258 order events published), then `step5_write_to_bigquery.py --runner=DirectRunner` for ~3 minutes against the real subscription, then verified both output tables in BigQuery.
+
+**Why this approach:**
+Same live end-to-end method used for step4 — DirectRunner against real Pub/Sub/BigQuery, since schema mismatches and dataset/table typos only surface at actual write time, not from `py_compile` or unit tests.
+
+**Key concept to remember:**
+Unlike the step4 test run, this run's watermark advanced far enough for 2 windows to close: `orders_per_minute` got 2 rows (zone_c and zone_b, `order_count = 1` each), each with a correctly populated `pipeline_processed_at`, confirming the schema fix (adding that field to `FormatWindowedCount`) was correct and the `WriteToBigQuery` write for the well-formed branch works end-to-end. This is the same DirectRunner watermark heuristic from the step4 test — it's timing-dependent, not deterministic, so a short local run isn't guaranteed to produce output on every run.
+
+**Gotchas/issues hit:**
+None. `malformed_events` grew from 61 to 72 rows (11 new, all `missing_fields: ['warehouse_zone']`), confirming the dead-letter branch still works unchanged from step4.
