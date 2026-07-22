@@ -124,3 +124,4 @@ event_simulator.py → Pub/Sub topics (order/delivery/inventory, each with a DLQ
 - **Data files**: generated CSVs/sample data always go in `shared/data-generators/output/`, never inside the dbt project folder or any `project-0N-*` pipeline directory.
 - **Single source of truth for dbt config**: all materialization and schema settings live in `dbt_project.yml` only. Never add `{{ config(...) }}` blocks in individual model SQL files.
 - **Workflow preference**: explain reasoning and trade-offs before running commands or writing code, especially for infrastructure changes (Terraform, IAM, GCP resource creation). Prefer single incremental steps over large multi-file changes, and pause for confirmation between steps when the task is non-trivial.
+  "Maintain project-04-realtime-ops/NOTES.md with a dated entry after each meaningful task, per the structure already established in that file."
