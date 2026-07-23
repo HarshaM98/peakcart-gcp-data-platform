@@ -72,7 +72,7 @@ pip install -r simulator/requirements.txt   # google-cloud-pubsub
 pip install -r pipeline/requirements.txt    # apache-beam[gcp]
 
 python simulator/event_simulator.py         # publishes order/delivery/inventory events to Pub/Sub topics
-python pipeline/step3_windowed_count.py     # Beam streaming pipeline reading from peakcart-order-events-sub
+python pipeline/step7_dedup_late_data.py    # current Beam streaming pipeline: all 3 topics, dedup + late data on orders
 ```
 
 ### CI
@@ -109,8 +109,9 @@ event_simulator.py → Pub/Sub topics (order/delivery/inventory, each with a DLQ
 
 - Terraform module `infrastructure/terraform/modules/pubsub_topic_with_dlq/` is reused per topic (order/delivery/inventory events), each configured with `max_delivery_attempts = 5` and exactly-once delivery. The Pub/Sub service agent email is computed directly from `data.google_project.current.number` (a fixed, documented Google pattern) rather than depending on `google_project_service_identity`'s output — this was a deliberate fix to avoid IAM bindings being destroyed/recreated on every apply (see `main.tf` comments).
 - `simulator/event_simulator.py` deliberately injects duplicates, out-of-order/stale timestamps, and randomly-dropped optional fields (`maybe_drop_field`) so the Beam pipeline has to handle real messiness rather than clean data.
-- Pipeline scripts under `pipeline/` are numbered increments (`step1_read_and_print.py` → `step2_parse_and_timestamp.py` → `step3_windowed_count.py`), each building on the last. The current step (windowed per-zone order counts) still only prints output and uses a defensive `.get()` fallback for missing `warehouse_zone` — proper dead-letter routing for malformed events is explicitly a follow-up, not yet implemented.
+- Pipeline scripts under `pipeline/` are numbered increments, each building on the last: `step1_read_and_print.py` → `step2_parse_and_timestamp.py` → `step3_windowed_count.py` (windowed per-zone order counts, printed only, defensive `.get()` fallback for missing `warehouse_zone`) → `step4_dead_letter.py` (real validation via a `ParseAndValidate` DoFn using Beam's `TaggedOutput`/`.with_outputs()`, malformed events routed to a `malformed_events` BigQuery table instead of crashing or guessing defaults) → `step5_write_to_bigquery.py` (well-formed branch also writes `orders_per_minute` to BigQuery, not just prints) → `step6_all_topics.py` (generalizes `ParseAndValidate` to take `required_fields`/`subscription_name` per topic, so all three topics — order/delivery/inventory — are read and validated; delivery and inventory are validated-and-printed only, not yet aggregated, since each needs different logic — event pairing, session windows — than a simple count) → `step7_dedup_late_data.py` (current step: adds dedup on the order branch, keyed on `order_id + event_type + timestamp` since `order_id` alone would wrongly collapse an order's distinct lifecycle events, plus late-data handling via `allowed_lateness=300s` and `ACCUMULATING` mode to match the simulator's up-to-5-minute-stale timestamps; delivery/inventory branches remain unchanged from step6). `pipeline/check_dedup.py` is a standalone script demonstrating the dedup key logic in isolation; `test_step7_all_topics.py` holds the current unit tests for `ParseAndValidate` across all three event types.
 - JSON Schema definitions and example payloads for all three event types live in `schemas/` — check these before changing event shapes in the simulator or pipeline.
+- Delivery/inventory aggregation (`avg_pick_time`, `active_deliveries`, `inventory_velocity`) is the next unfinished step — deferred because it needs event-pairing/session-window logic rather than the simple per-key count used for orders.
 
 ### Shared data generators
 
