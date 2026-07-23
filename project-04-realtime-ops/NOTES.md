@@ -117,3 +117,19 @@ Dedup has to happen *inside* the window (after `WindowInto`, before `GroupByKey`
 
 **Gotchas/issues hit:**
 None yet — not run live against Pub/Sub/BigQuery in this session; verified via unit tests (`test_step7_all_topics.py`) and the standalone `check_dedup.py` script only.
+
+---
+
+## 2026-07-23 - Removed stale test_step4_dead_letter.py
+
+**What I built/changed:**
+Deleted `pipeline/test_step4_dead_letter.py`. It was already dropped from git in the 2026-07-22 commit that added step6/step7 (superseded by `test_step7_all_topics.py`), but a copy was still sitting on disk, untracked, and reappeared in `git status`.
+
+**Why this approach:**
+The file imports `ParseAndValidate` from `step4_dead_letter.py` and calls it with the old no-arg constructor. `step4_dead_letter.py` itself was never updated to the generalized `required_fields`/`subscription_name` constructor introduced in step6, so the test still passes against that stale signature — but it no longer represents current pipeline behavior. Keeping it around risked a future read (by me or otherwise) mistaking it for live coverage of the dead-letter path, when `test_step7_all_topics.py` is the real, current test file for that logic.
+
+**Key concept to remember:**
+A deleted-then-recreated untracked file doesn't show up as "deleted" in git status — it just looks like a normal untracked file, which is easy to mistake for new work instead of a stale leftover.
+
+**Gotchas/issues hit:**
+None.
