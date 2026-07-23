@@ -1,0 +1,6 @@
+[
+  {"name": "window_start", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "window_end", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "active_delivery_count", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "pipeline_processed_at", "type": "TIMESTAMP", "mode": "REQUIRED"}
+]

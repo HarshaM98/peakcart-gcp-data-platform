@@ -167,3 +167,21 @@ Added dedup to the inventory branch (keyed on `warehouse_id + product_id + event
 
 **Gotchas/issues hit:**
 None. Ran a live end-to-end test (`event_simulator.py --duration 1 --messiness 0.6` publishing to all three topics, then `step8_inventory_velocity.py --runner=DirectRunner` for ~3 minutes): `inventory_velocity` got 8 rows across `WH_NEWYORK`/`WH_BOSTON`/`WH_PHILLY`, each with a plausible net change (e.g. one row showed `-40`, confirming picks/adjustments net against receipts correctly, not just summing raw magnitudes). `malformed_events` continued accumulating as expected from the unchanged validation logic.
+
+---
+
+## 2026-07-23 - active_deliveries aggregation (step9_active_deliveries.py)
+
+**What I built/changed:**
+Added `pipeline/step9_active_deliveries.py`, building on step8. The delivery branch is now aggregated instead of print-only: per 1-minute window, group events by `delivery_id`, take the one with the latest `timestamp` (that delivery's current status), filter out anything whose latest status is `completed`, then a single windowed `Count.Globally()` gives `active_delivery_count`. Written to a new `active_deliveries` BigQuery table (schema at `infrastructure/bigquery/active_deliveries_schema.json`). Order and inventory branches unchanged from step8. Added `test_step9_active_deliveries.py` covering `take_latest_by_timestamp` (correct-latest-wins, and duplicates are harmless), `is_not_completed`, and a full group→latest→filter→count mini pipeline.
+
+**Why this approach:**
+This design (confirmed with the user before starting, alongside `avg_pick_time`'s and `inventory_velocity`'s definitions) approximates "how many deliveries are currently in flight" using only a single window's events — a delivery whose last event was several windows ago won't be counted, since there's no cross-window state here. A true point-in-time count would need a stateful DoFn tracking every delivery's last-known status indefinitely, a heavier mechanism than this step's windowed-combine pattern; deferred unless the windowed approximation proves insufficient in practice.
+
+No separate dedup step was needed here (unlike order/inventory) — taking the *latest* event per `delivery_id` already absorbs exact duplicates for free, since a duplicate shares its original's timestamp and either copy is equally correct to keep as "the latest."
+
+**Key concept to remember:**
+`beam.combiners.Count.Globally()` needs `.without_defaults()` under non-global windowing (`FixedWindows` here) — its normal default behavior (emit 0 for empty input) is only defined for the `GlobalWindow`, and Beam raises `ValueError: Default values are not yet supported in CombineGlobally()...` at pipeline construction otherwise. Confirmed this with a standalone DirectRunner test before wiring it into the real pipeline. Consequence: a window where every delivery's latest status happens to be `completed` (zero active deliveries) produces no row at all for that window, rather than a row with `0` — same omit-rather-than-zero behavior `orders_per_minute` already has for zones with no orders.
+
+**Gotchas/issues hit:**
+First live end-to-end attempt (1-minute simulator run, ~3-minute DirectRunner run) produced zero rows in `active_deliveries` even though `orders_per_minute`/`inventory_velocity` got new rows in the same run — initially looked like a bug, but was actually the `.without_defaults()` behavior above: the few windows that did close apparently had every delivery already `completed`, a legitimate zero-count result, not a broken pipeline. To be sure this wasn't a code issue, ran a second, longer live test (2-minute simulator run, ~4-minute DirectRunner run); that run's first attempt produced *no* new rows in any of the three output tables (not just delivery), consistent with the DirectRunner watermark heuristic documented back in the step4/step5 live tests (window-closing is timing-dependent, not deterministic, especially for an unbounded Pub/Sub source). A follow-up run of the same length did close windows and produced `active_delivery_count = 4` for one window, confirming the logic works correctly end-to-end once DirectRunner's watermark actually advances.
