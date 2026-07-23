@@ -83,3 +83,37 @@ Unlike the step4 test run, this run's watermark advanced far enough for 2 window
 
 **Gotchas/issues hit:**
 None. `malformed_events` grew from 61 to 72 rows (11 new, all `missing_fields: ['warehouse_zone']`), confirming the dead-letter branch still works unchanged from step4.
+
+---
+
+## 2026-07-22 - Generalize to all three topics (step6_all_topics.py)
+
+**What I built/changed:**
+Added `pipeline/step6_all_topics.py`, extending step5 to read from all three Pub/Sub subscriptions (order, delivery, inventory), not just orders. `ParseAndValidate` became parameterized (`required_fields`, `subscription_name` passed into the constructor) instead of hardcoded for orders, so one DoFn class serves all three event types. Order events are unchanged behavior (validated, windowed, counted per zone, written to `orders_per_minute`). Delivery and inventory events are validated only — well-formed events are printed, not yet aggregated. All three malformed branches are combined via `beam.Flatten()` into the same `malformed_events` table.
+
+**Why this approach:**
+Sharing one parameterized `ParseAndValidate` class across topics avoids three near-identical copies of the same validate-or-tag-malformed logic — only the required-fields list and the subscription name (for error attribution) differ per event type. Combining all three malformed branches into one BigQuery sink means error rates can be queried across all event types in one place, rather than three separate tables.
+
+**Key concept to remember:**
+Delivery and inventory aggregation (`avg_pick_time`, `active_deliveries`, `inventory_velocity`) is deliberately deferred, not an oversight — each needs different, more complex logic than a simple per-key count (pairing related events across a delivery's lifecycle, session windows), so it doesn't fit the same windowed-count pattern used for orders.
+
+**Gotchas/issues hit:**
+None.
+
+---
+
+## 2026-07-22 - Deduplication and late data handling (step7_dedup_late_data.py)
+
+**What I built/changed:**
+Added `pipeline/step7_dedup_late_data.py`, building on step6. The order branch now dedups events (key = `order_id + event_type + timestamp`, via `beam.Map` → `GroupByKey` → take-first-per-key) and handles late data (`FixedWindows(60)` with `trigger=AfterWatermark(late=AfterCount(1))`, `accumulation_mode=ACCUMULATING`, `allowed_lateness=300s`). Delivery and inventory branches are unchanged from step6 (still validate-and-print only). Also added `pipeline/check_dedup.py`, a small standalone script that runs the dedup key/GroupByKey/take-first logic against three in-memory events (two exact duplicates, one distinct) to sanity-check the dedup behavior outside the full streaming pipeline. Renamed/moved the step4 unit tests to `pipeline/test_step7_all_topics.py`, importing from `step7_dedup_late_data` and adding new test classes for delivery and inventory validation (proving the now-shared `ParseAndValidate` class correctly validates each event type's own required fields).
+
+**Why this approach:**
+`order_id` alone is the wrong dedup key — one order legitimately produces multiple distinct events (placed, picked, packed...) that share an `order_id` but must not be collapsed together. The correct idempotency key is the combination that identifies one specific event occurrence: `order_id + event_type + timestamp`. This matches how `event_simulator.py` actually produces duplicates — it resends the exact same event dict unchanged (see `run_producer`'s `last_event` resend), so a duplicate is byte-for-byte identical under this key, not just related.
+
+The simulator's `stale_iso()` deliberately backdates event timestamps by up to a few minutes to simulate late/out-of-order delivery. Since Beam windows by event time, a stale event can arrive after its window has already closed and fired. `allowed_lateness` (set to 5 minutes to match the simulator's worst case) keeps the window open long enough to accept it, and `ACCUMULATING` mode means a late arrival re-fires the window with an updated cumulative count instead of the event being dropped or producing a confusing separate row for the same window.
+
+**Key concept to remember:**
+Dedup has to happen *inside* the window (after `WindowInto`, before `GroupByKey`) so that `beam.GroupByKey()` groups within a single window's contents — grouping before windowing would collapse duplicates across window boundaries, not within the query semantics we want.
+
+**Gotchas/issues hit:**
+None yet — not run live against Pub/Sub/BigQuery in this session; verified via unit tests (`test_step7_all_topics.py`) and the standalone `check_dedup.py` script only.
