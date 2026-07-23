@@ -1,0 +1,8 @@
+[
+  {"name": "window_start", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "window_end", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "warehouse_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "product_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "net_quantity_change", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "pipeline_processed_at", "type": "TIMESTAMP", "mode": "REQUIRED"}
+]

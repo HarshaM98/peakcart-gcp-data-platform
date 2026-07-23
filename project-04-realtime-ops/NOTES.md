@@ -149,3 +149,21 @@ CLAUDE.md and NOTES.md can drift independently — NOTES.md is the detailed date
 
 **Gotchas/issues hit:**
 None.
+
+---
+
+## 2026-07-23 - inventory_velocity aggregation (step8_inventory_velocity.py)
+
+**What I built/changed:**
+Added `pipeline/step8_inventory_velocity.py`, building on step7. The inventory branch is now aggregated instead of print-only: windowed (`FixedWindows(60)`) sum of `quantity_change` keyed by `(warehouse_id, product_id)`, written to a new `inventory_velocity` BigQuery table (schema added at `infrastructure/bigquery/inventory_velocity_schema.json`). Order and delivery branches are unchanged from step7. Also added `test_step8_inventory_velocity.py` covering the new dedup key and a dedup-then-sum mini pipeline, and `avg_pick_time`/`active_deliveries` are intentionally deferred to their own future steps (confirmed this scoping with the user before starting, along with each metric's definition).
+
+**Why this approach:**
+Of the three deferred aggregations named in step6's docstring, this one is the simplest — a plain windowed sum, same shape as `orders_per_minute`'s windowed count, just a different key and combiner. Tackled it first to keep steps incremental rather than building all three aggregations (which need very different Beam patterns — event pairing for `avg_pick_time`, latest-status-per-key for `active_deliveries`) in one pass.
+
+Added dedup to the inventory branch (keyed on `warehouse_id + product_id + event_type + timestamp`, mirroring step7's order dedup key) even though it wasn't explicitly requested — a sum is exactly the aggregation shape where an undetected duplicate silently corrupts the result (double-counts `quantity_change`), unlike delivery's print-only branch where a duplicate print is harmless. Without this, the metric would sometimes be wrong in a way that's invisible from the code, only from comparing against real event counts.
+
+**Key concept to remember:**
+`beam.CombinePerKey(sum)` needs its input already deduped and keyed by `(warehouse_id, product_id)` with only the `quantity_change` value carried through — done via `key_by_warehouse_and_product`, which maps each event to `((warehouse_id, product_id), quantity_change)` after the dedup/take-first stage, so the combiner only ever sees the numbers it needs to add.
+
+**Gotchas/issues hit:**
+None. Ran a live end-to-end test (`event_simulator.py --duration 1 --messiness 0.6` publishing to all three topics, then `step8_inventory_velocity.py --runner=DirectRunner` for ~3 minutes): `inventory_velocity` got 8 rows across `WH_NEWYORK`/`WH_BOSTON`/`WH_PHILLY`, each with a plausible net change (e.g. one row showed `-40`, confirming picks/adjustments net against receipts correctly, not just summing raw magnitudes). `malformed_events` continued accumulating as expected from the unchanged validation logic.
