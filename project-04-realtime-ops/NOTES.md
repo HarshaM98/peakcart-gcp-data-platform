@@ -133,3 +133,19 @@ A deleted-then-recreated untracked file doesn't show up as "deleted" in git stat
 
 **Gotchas/issues hit:**
 None.
+
+---
+
+## 2026-07-23 - Updated CLAUDE.md's project-04 section for steps 4-7
+
+**What I built/changed:**
+Updated the root `CLAUDE.md`'s project-04 command example and architecture bullets, which were stale at step3 (windowed counts, print-only, `step3_windowed_count.py` as the "current" entry point). Now documents the actual progression through `step4_dead_letter.py` (dead-letter routing), `step5_write_to_bigquery.py` (BigQuery writes), `step6_all_topics.py` (all-topic generalization), and `step7_dedup_late_data.py` (dedup + late-data handling, now the current entry point), plus a note that delivery/inventory aggregation is the next unfinished step.
+
+**Why this approach:**
+CLAUDE.md is the first thing a future session reads for context, so letting it drift two steps behind the actual pipeline risked a future Claude Code session (or me) reading `step3` as current and re-deriving dead-letter/dedup work that already exists, or running the wrong script as the "current" pipeline.
+
+**Key concept to remember:**
+CLAUDE.md and NOTES.md can drift independently — NOTES.md is the detailed dated log, CLAUDE.md is the always-current summary. Both need updating after a meaningful step, not just one.
+
+**Gotchas/issues hit:**
+None.
