@@ -267,3 +267,19 @@ Tasks got stuck in `queued` state indefinitely after being dispatched — looked
 
 **Gotchas/issues hit:**
 `airflow tasks log` is not a supported Composer CLI subcommand (unlike vanilla Airflow) — use `gcloud logging read` against the environment's log streams (`airflow-worker`, `airflow-scheduler`) instead. `gcloud composer environments list-workloads` requires Composer 3+; not usable against a Composer 2 image. `kubectl` against the environment's GKE cluster needs `gke-gcloud-auth-plugin` installed separately (skipped this route, used Cloud Logging instead since it was sufficient). Manually triggering a DAG run with `--exec-date` doesn't set `{{ ds }}` to the date you'd naively expect from Airflow's data-interval alignment rules — it turned out to resolve to the exec-date's own date directly in this case, which only became clear by checking the actual rollup_date written to BigQuery rather than reasoning about it in the abstract. Screenshots of this verification are saved in `screenshots/` (`composer_dag_graph_all_green.png`, `composer_log_rollup_summary.png`, `bigquery_orders_daily_result.png`, `bigquery_active_deliveries_daily_result.png`, `bigquery_avg_pick_time_daily_result.png`, plus two GCP-console environment screenshots) — the log summary and BigQuery result screenshots are the strongest evidence since they show real computed numbers, not just green task boxes.
+
+---
+
+## 2026-07-28 - README.md and CI (project04-ci.yml)
+
+**What I built/changed:**
+Added `README.md` — project-04 was the only built project without one (project-01 and project-03 both have one). Follows project-03's structure (Overview, Architecture diagram, Key Technical Decisions, a results table, How to Run, Files) and summarizes the six real design decisions made across the NOTES.md history: memoryless-vs-lifecycle order events, the composite dedup key, why multiple rows per window is expected not a bug, why `avg_pick_time` needs session windows, the scoped Dataflow worker identity, and why Composer orchestrates batch rollups rather than the streaming job itself. Also added `.github/workflows/project04-ci.yml`: one job compiles and unit-tests every pipeline step (no GCP credentials needed — DirectRunner-based unit tests don't touch real Pub/Sub/BigQuery), a second job runs `terraform fmt -check` + `terraform validate` (also no credentials needed — `validate` is a pure syntax/schema check, doesn't evaluate data sources or touch the remote state backend).
+
+**Why this approach:**
+Deliberately scoped CI to fmt/validate only, not a live `terraform plan` — a real plan would need the same `GCP_SA_KEY` secret pattern already used by `dbt-ci.yml`, and that secret's IAM scope was set up for BigQuery/dbt access, not for planning against Pub/Sub/IAM/Dataflow resources. Adding live-plan CI would mean provisioning broader CI credentials for a new purpose, which is a bigger, separate decision than "add basic CI" — fmt+validate catches the large majority of real mistakes (syntax errors, drift, broken references) without that scope expansion.
+
+**Key concept to remember:**
+`terraform validate` works fully offline with `terraform init -backend=false` — it never touches the real GCS state backend or needs GCP credentials, since it only checks syntax and internal consistency, not live resource state. Confirmed this by testing the exact CI steps locally against a scratch copy of the terraform directory before trusting the workflow file.
+
+**Gotchas/issues hit:**
+None — both jobs (Python compile+test, Terraform fmt+validate) were run and passed locally against the real repo content before committing the workflow file.

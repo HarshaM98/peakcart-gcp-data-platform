@@ -1,0 +1,81 @@
+name: project-04 CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'project-04-realtime-ops/pipeline/**'
+      - 'project-04-realtime-ops/simulator/**'
+      - 'project-04-realtime-ops/infrastructure/terraform/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'project-04-realtime-ops/pipeline/**'
+      - 'project-04-realtime-ops/simulator/**'
+      - 'project-04-realtime-ops/infrastructure/terraform/**'
+  workflow_dispatch: {}
+
+jobs:
+  python-tests:
+    name: Beam pipeline unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pipeline dependencies
+        working-directory: project-04-realtime-ops/pipeline
+        run: pip install -r requirements.txt
+
+      - name: Install simulator dependencies
+        working-directory: project-04-realtime-ops/simulator
+        run: pip install -r requirements.txt
+
+      - name: Syntax-check every pipeline step
+        working-directory: project-04-realtime-ops/pipeline
+        run: |
+          for f in step*.py; do
+            echo "compiling $f"
+            python -m py_compile "$f"
+          done
+
+      - name: Syntax-check the simulator
+        working-directory: project-04-realtime-ops/simulator
+        run: python -m py_compile event_simulator.py
+
+      - name: Run unit tests
+        working-directory: project-04-realtime-ops/pipeline
+        run: |
+          python -m unittest test_step7_all_topics test_step8_inventory_velocity \
+            test_step9_active_deliveries test_step10_avg_pick_time -v
+
+  terraform-check:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.0'
+
+      - name: Terraform fmt check
+        working-directory: project-04-realtime-ops/infrastructure/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend, no credentials needed)
+        working-directory: project-04-realtime-ops/infrastructure/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: project-04-realtime-ops/infrastructure/terraform
+        run: terraform validate
