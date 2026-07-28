@@ -106,6 +106,25 @@ tables — the natural batch-over-streaming pattern, and the same
 See `NOTES.md` for the full dated build log and `COMMANDS.md` for every
 command used to build, test, and deploy this project.
 
+### Evidence
+
+The Composer DAG's own final task prints a summary pulled live from
+BigQuery after all five rollups complete:
+
+![Composer rollup summary log](screenshots/composer_log_rollup_summary.png)
+
+The DAG graph after a full successful run, all 7 tasks green:
+
+![Composer DAG graph, all tasks green](screenshots/composer_dag_graph_all_green.png)
+
+The dedup-aware `active_deliveries_daily` and `avg_pick_time_daily` rollups
+in BigQuery — these two specifically needed the `ROW_NUMBER()` dedup fix to
+be correct, so they're the strongest proof the harder logic worked, not
+just a trivial sum:
+
+![active_deliveries_daily BigQuery result](screenshots/bigquery_active_deliveries_daily_result.png)
+![avg_pick_time_daily BigQuery result](screenshots/bigquery_avg_pick_time_daily_result.png)
+
 ## How to Run
 
 ### Prerequisites
