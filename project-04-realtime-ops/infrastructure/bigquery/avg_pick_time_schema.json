@@ -1,0 +1,7 @@
+[
+  {"name": "window_start", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "window_end", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "avg_pick_time_seconds", "type": "FLOAT", "mode": "REQUIRED"},
+  {"name": "sample_count", "type": "INTEGER", "mode": "REQUIRED"},
+  {"name": "pipeline_processed_at", "type": "TIMESTAMP", "mode": "REQUIRED"}
+]

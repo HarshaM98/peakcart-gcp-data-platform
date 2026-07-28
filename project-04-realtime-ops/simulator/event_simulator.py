@@ -5,6 +5,12 @@ Publishes realistic order, delivery, and inventory events to Pub/Sub,
 deliberately including duplicates, out-of-order timestamps, and missing
 optional fields, so the downstream Beam pipeline has real messiness to
 handle, not just clean textbook data.
+
+Order events model one continuous lifecycle per order_id (placed -> picked
+-> packed -> shipped -> delivered, via OrderLifecycle) rather than
+unrelated one-off events, so downstream metrics that pair two stages of
+the same order (e.g. avg_pick_time) can find real pairs in live data.
+Delivery and inventory events remain independent one-off events per call.
 """
 
 import argparse
@@ -49,15 +55,81 @@ def maybe_drop_field(event: dict, optional_fields: list, drop_rate: float):
     return event
 
 
-def make_order_event(messiness: float) -> dict:
-    event = {
-        "order_id": f"O{random.randint(10000, 99999)}",
-        "customer_id": f"C{random.randint(1000, 9999)}",
-        "event_type": random.choice(ORDER_STAGES),
-        "warehouse_zone": random.choice(WAREHOUSE_ZONES),
-        "timestamp": stale_iso() if random.random() < messiness else now_iso(),
-        "items_count": random.randint(1, 12),
-    }
+# Wall-clock delay range (seconds) before an in-flight order advances to
+# the next lifecycle stage. Compressed well below realistic warehouse
+# timings so a short simulator run produces several complete lifecycles --
+# these are for testability, not a claim about real pick/pack/ship times.
+ORDER_STAGE_DELAYS_SECONDS = {
+    "placed": (5, 20),   # -> picked
+    "picked": (5, 20),   # -> packed
+    "packed": (10, 30),  # -> shipped
+    "shipped": (15, 40),  # -> delivered
+}
+
+
+class OrderLifecycle:
+    """Tracks in-flight orders so make_order_event can advance a real order
+    through placed -> picked -> packed -> shipped -> delivered over time,
+    instead of generating unrelated one-off events for a fresh random
+    order_id on every call. Downstream metrics that pair two stages of the
+    same order (e.g. avg_pick_time: time between placed and picked) need
+    this continuity to find real pairs in live data.
+
+    warehouse_zone and items_count are fixed at "placed" time and carried
+    through every later event for that order -- an order's physical zone
+    and item count don't change mid-fulfillment. maybe_drop_field can still
+    independently omit either field from any single event, preserving the
+    existing per-message data-quality messiness."""
+
+    def __init__(self):
+        self._orders = {}  # order_id -> stage_index, fixed attrs, ready_at
+
+    def start_new_order(self) -> dict:
+        order_id = f"O{random.randint(10000, 99999)}"
+        self._orders[order_id] = {
+            "stage_index": 0,
+            "customer_id": f"C{random.randint(1000, 9999)}",
+            "warehouse_zone": random.choice(WAREHOUSE_ZONES),
+            "items_count": random.randint(1, 12),
+            "ready_at": time.time() + random.uniform(*ORDER_STAGE_DELAYS_SECONDS[ORDER_STAGES[0]]),
+        }
+        return self._event_for(order_id)
+
+    def next_ready_order_id(self):
+        """Returns an in-flight order_id whose next-stage delay has
+        elapsed, or None if every in-flight order is still waiting."""
+        now = time.time()
+        for order_id, order in self._orders.items():
+            if now >= order["ready_at"]:
+                return order_id
+        return None
+
+    def advance(self, order_id: str) -> dict:
+        order = self._orders[order_id]
+        order["stage_index"] += 1
+        stage = ORDER_STAGES[order["stage_index"]]
+        event = self._event_for(order_id)
+        if stage == ORDER_STAGES[-1]:
+            del self._orders[order_id]  # delivered: lifecycle complete
+        else:
+            order["ready_at"] = time.time() + random.uniform(*ORDER_STAGE_DELAYS_SECONDS[stage])
+        return event
+
+    def _event_for(self, order_id: str) -> dict:
+        order = self._orders[order_id]
+        return {
+            "order_id": order_id,
+            "customer_id": order["customer_id"],
+            "event_type": ORDER_STAGES[order["stage_index"]],
+            "warehouse_zone": order["warehouse_zone"],
+            "items_count": order["items_count"],
+        }
+
+
+def make_order_event(tracker: "OrderLifecycle", messiness: float) -> dict:
+    ready_order_id = tracker.next_ready_order_id()
+    event = tracker.advance(ready_order_id) if ready_order_id else tracker.start_new_order()
+    event["timestamp"] = stale_iso() if random.random() < messiness else now_iso()
     return maybe_drop_field(event, ["warehouse_zone", "items_count"], messiness)
 
 
@@ -124,8 +196,12 @@ async def main(duration_minutes: float, messiness: float):
     end_time = time.time() + duration_minutes * 60
     print(f"Running for {duration_minutes} minutes with messiness={messiness}")
 
+    order_lifecycle = OrderLifecycle()
+
     await asyncio.gather(
-        run_producer("order", TOPIC_ORDER, make_order_event, messiness, 1.0, end_time),
+        run_producer("order", TOPIC_ORDER,
+                     lambda m: make_order_event(order_lifecycle, m),
+                     messiness, 1.0, end_time),
         run_producer("delivery", TOPIC_DELIVERY, make_delivery_event, messiness, 3.0, end_time),
         run_producer("inventory", TOPIC_INVENTORY, make_inventory_event, messiness, 2.0, end_time),
     )

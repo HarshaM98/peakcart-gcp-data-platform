@@ -6,7 +6,7 @@
   "properties": {
     "order_id": {
       "type": "string",
-      "description": "Unique order identifier. Used as the idempotency key for deduplication downstream."
+      "description": "Unique order identifier, shared across every stage of one order's lifecycle. Not itself a dedup key downstream -- one order legitimately has many distinct events (placed, picked, packed...) sharing this id, so the real idempotency key is order_id + event_type + timestamp."
     },
     "customer_id": {
       "type": "string",
