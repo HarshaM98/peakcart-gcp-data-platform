@@ -1,0 +1,7 @@
+config {
+  type: "declaration",
+  database: "harsha-data-platform",
+  schema: "peakcart_supply_chain_bronze",
+  name: "inventory_daily",
+  description: "Daily stock level, rolling demand, lead time, and same-day stockout flag per product/warehouse. Not managed by Dataform -- loaded via bq load."
+}

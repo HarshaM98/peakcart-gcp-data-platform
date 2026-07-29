@@ -1,0 +1,5 @@
+dataformCoreVersion: 3.0.62
+defaultProject: harsha-data-platform
+defaultLocation: US-CENTRAL1
+defaultDataset: peakcart_supply_chain_features
+defaultAssertionDataset: peakcart_supply_chain_features_assertions

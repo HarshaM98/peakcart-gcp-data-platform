@@ -1,0 +1,7 @@
+config {
+  type: "declaration",
+  database: "harsha-data-platform",
+  schema: "peakcart_supply_chain_bronze",
+  name: "product_demand_daily",
+  description: "Daily units sold per product, loaded as-is from generate_project05_data.py's output. Not managed by Dataform -- loaded via bq load."
+}

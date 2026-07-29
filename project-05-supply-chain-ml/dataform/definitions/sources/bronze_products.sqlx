@@ -1,0 +1,7 @@
+config {
+  type: "declaration",
+  database: "harsha-data-platform",
+  schema: "peakcart_bronze",
+  name: "bronze_products",
+  description: "Shared product reference data, already loaded by project-01's load_bronze.sh. Reused here for category/price rather than duplicating it into project-05's own bronze dataset."
+}

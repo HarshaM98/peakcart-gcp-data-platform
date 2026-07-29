@@ -1,0 +1,52 @@
+config {
+  type: "table",
+  schema: "peakcart_supply_chain_features",
+  description: "One row per product/day. Predicts stockout_next_7d (will this product stock out within the next 7 days) using only same-day-or-earlier features -- never the same-day stockout_flag itself, which would leak the answer."
+}
+
+-- Label design note: stockout_next_7d looks strictly FORWARD (1 to 7 days
+-- ahead) from each observation date, using a window frame rather than the
+-- current day's own stockout_flag. Using today's stockout_flag as a
+-- feature (or accidentally as part of the label window) would make the
+-- "prediction" trivial and meaningless -- the model needs to predict an
+-- outcome it can't already see.
+with labeled as (
+
+  select
+    i.product_id,
+    i.date,
+    i.warehouse_id,
+    i.qty_on_hand,
+    i.rolling_7d_avg_demand,
+    i.lead_time_days,
+    max(i.date) over (partition by i.product_id) as product_last_date,
+    max(i.stockout_flag) over (
+      partition by i.product_id
+      order by i.date
+      rows between 1 following and 7 following
+    ) as stockout_next_7d
+
+  from ${ref("inventory_daily")} i
+
+)
+
+select
+  l.product_id,
+  l.date,
+  l.warehouse_id,
+  l.qty_on_hand,
+  l.rolling_7d_avg_demand,
+  l.lead_time_days,
+  p.category,
+  p.price,
+  l.stockout_next_7d
+
+from labeled l
+
+inner join ${ref("bronze_products")} p
+  on p.product_id = l.product_id
+
+-- Drop the last 7 days per product: their forward-looking window is
+-- truncated (fewer than 7 real future days exist), so their label would
+-- be based on incomplete information rather than a genuine 7-day horizon.
+where l.date <= date_sub(l.product_last_date, interval 7 day)

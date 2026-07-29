@@ -1,0 +1,31 @@
+config {
+  type: "operations",
+  hasOutput: true,
+  schema: "peakcart_supply_chain_features",
+  name: "stockout_risk_model",
+  description: "Trains the stockout risk classifier. Uses a TIME-based split (train on Jan-Oct, hold out Nov-Dec) rather than a random split -- rows for the same product on nearby days are highly similar, so a random split would leak information between train and test and overstate accuracy. This mirrors how a real deployment would be evaluated: can the model generalize to a future period it hasn't seen, not just to held-out rows shuffled from the same time period it trained on."
+}
+
+create or replace model ${self()}
+options (
+  model_type = 'LOGISTIC_REG',
+  input_label_cols = ['stockout_next_7d'],
+  auto_class_weights = true,
+  -- Registers this model in the Vertex AI Model Registry automatically on
+  -- every training run, rather than a separate manual export/upload step --
+  -- the standard BQML/Vertex AI integration path.
+  model_registry = 'vertex_ai',
+  vertex_ai_model_id = 'stockout-risk-model',
+  vertex_ai_model_version_aliases = ['default']
+) as
+
+select
+  qty_on_hand,
+  rolling_7d_avg_demand,
+  lead_time_days,
+  category,
+  price,
+  stockout_next_7d
+
+from ${ref("stockout_risk_features")}
+where date < '2025-11-01'
