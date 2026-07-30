@@ -4,9 +4,11 @@
 
 A stockout-risk classifier built to learn how AI/ML is actually deployed
 on GCP end-to-end: synthetic data with genuine causal signal, feature
-engineering in Dataform, model training/evaluation in BigQuery ML, and
-online serving via the Vertex AI Model Registry and Endpoints. Built with
-Dataform, BigQuery ML, and Vertex AI.
+engineering in Dataform, model training/evaluation in BigQuery ML, online
+serving via the Vertex AI Model Registry and Endpoints, and finally an
+automated Vertex AI Pipeline that trains, evaluates, and conditionally
+deploys the model as one job. Built with Dataform, BigQuery ML, and
+Vertex AI (Model Registry, Endpoints, and Pipelines).
 
 ## Architecture
 
@@ -36,6 +38,23 @@ Vertex AI Model Registry (auto-registered via model_registry='vertex_ai')
   |
   v
 Vertex AI Endpoint -- online predictions (verified, then torn down)
+
+
+-- Phase 4: the same train -> evaluate -> deploy sequence, automated --
+
+pipelines/stockout_risk_pipeline.py (KFP v2, submitted as a Vertex AI PipelineJob)
+  |
+  v
+train-stockout-risk-model (BigqueryCreateModelJobOp)
+  |
+  v
+evaluate-on-held-out-period (custom component, ML.EVALUATE via BigQuery client)
+  |
+  v
+deploy-if-good-enough (dsl.If roc_auc >= threshold)
+  |
+  v
+deploy-to-endpoint (custom component, Vertex AI REST API, disableExplanations=true)
 ```
 
 ## Key Technical Decisions
@@ -105,6 +124,36 @@ and the console's own "Deploy & test" UI, all agreeing), then undeployed
 and deleted. The Model Registry entry itself is kept (low/no-cost
 metadata, same as leaving a BQML model in place).
 
+### Custom pipeline components instead of the built-in ones, where it mattered
+
+The Vertex AI Pipeline (`pipelines/stockout_risk_pipeline.py`) uses Google's
+own `BigqueryCreateModelJobOp` for training -- no reason to reinvent a
+mature, well-tested component. But evaluation and deployment are custom
+Python components instead of the library's built-in `BigqueryEvaluateModelJobOp`
+and `ModelDeployOp`: the former's `evaluation_metrics` output is an opaque
+`system.Artifact` not worth reverse-engineering, and the latter has no
+input to disable the auto-attached explanation spec, so it would hit the
+exact same TensorFlow graph-version failure as the manual Phase 3
+deployment. Custom components keep the ROC AUC a transparent value the
+`dsl.If` condition can compare against, and reuse the proven
+`disableExplanations=true` fix directly.
+
+### The hidden tenant-project service account
+
+Getting the pipeline to actually run needed two separate IAM fixes, not
+one. First, the pipeline's own service account needs `bigquery.jobUser`/
+`bigquery.dataEditor` -- unsurprising. Second, and not documented anywhere
+obvious: `BigqueryCreateModelJobOp` doesn't run the BigQuery job as that
+service account at all. It runs as a separate, Vertex-AI-managed
+**tenant-project service account** (`training-<id>@<tenant>-tp.iam.gserviceaccount.com`)
+minted internally for the component's underlying CustomJob launcher. This
+only became visible by tracing the actual failing principal in
+`cloudaudit.googleapis.com/data_access` logs -- the same log-tracing
+technique used to diagnose the Composer worker-churn issue in project-04
+and the Dataflow explanation-preprocessing failure in this project's
+Phase 3. Full troubleshooting log, including a separate IAM-propagation-delay
+red herring in between, is in `NOTES.md`.
+
 ## Verification Results
 
 | Check | Result |
@@ -115,6 +164,7 @@ metadata, same as leaving a BQML model in place).
 | `ML.WEIGHTS` | `lead_time_days` (0.120) and `rolling_7d_avg_demand` (0.109) are the strongest positive drivers -- matches the simulation's design, not an accident |
 | Live online prediction | 89.4% stockout-risk probability for a low-stock/high-lead-time example, identical across `ML.PREDICT`, a direct REST call, and the console UI |
 | Cost discipline | Vertex AI endpoint created, verified, then undeployed and deleted -- nothing left running/billing |
+| Vertex AI Pipeline (Phase 4) | Full run succeeded: trained a fresh model version, evaluated it at ROC AUC 0.9006 (confirmed via the task's actual output value, not just its state), took the conditional deploy branch for real, served a correct live prediction from the pipeline-deployed endpoint, then torn down |
 
 See `NOTES.md` for the full dated build log, including the BigQuery
 dataset immutable-rename gotcha and the explanation-preprocessing
@@ -133,6 +183,19 @@ The deployed model on the endpoint, status Ready:
 A live online prediction made directly through the console's "Deploy & test" UI:
 
 ![Live prediction via console Deploy & test tab](screenshots/vertex_deploy_test_prediction.png)
+
+The full pipeline run, all 4 steps green, with the `condition-1` node's actual
+input values (0.9006 vs. the 0.8 threshold) that triggered the deploy branch:
+
+![Pipeline run graph and condition node detail](screenshots/vertex_pipeline_run_condition_node_detail.png)
+
+The `evaluate-model` step's own logged output, confirming the ROC AUC value:
+
+![Evaluate-model node output](screenshots/vertex_pipeline_evaluate_model_output.png)
+
+The full runs list, including the 3 failed attempts from troubleshooting the IAM issues:
+
+![Pipeline runs list, showing failures then success](screenshots/vertex_pipeline_runs_list.png)
 
 ## How to Run
 
@@ -196,6 +259,36 @@ gcloud ai endpoints undeploy-model ENDPOINT_ID --region=us-central1 --deployed-m
 gcloud ai endpoints delete ENDPOINT_ID --region=us-central1 --quiet
 ```
 
+### Run the automated pipeline (Phase 4)
+
+```bash
+python3.11 -m venv ~/.venv/vertex-pipelines-env
+source ~/.venv/vertex-pipelines-env/bin/activate
+pip install -r pipelines/requirements.txt
+
+cd pipelines
+python3 stockout_risk_pipeline.py   # compiles to stockout_risk_pipeline.json
+
+python3 - <<'EOF'
+from google.cloud import aiplatform
+
+aiplatform.init(project="harsha-data-platform", location="us-central1")
+job = aiplatform.PipelineJob(
+    display_name="stockout-risk-pipeline-run",
+    template_path="stockout_risk_pipeline.json",
+    pipeline_root="gs://peakcart-vertex-pipelines-2026/pipeline-root",
+    parameter_values={"roc_auc_threshold": 0.8, "endpoint_display_name": "stockout-risk-endpoint-pipeline"},
+)
+# Must specify a service account with bigquery.jobUser/bigquery.dataEditor --
+# AND grant those same roles to the Vertex-AI-managed tenant training SA
+# that BigqueryCreateModelJobOp actually runs as (see NOTES.md).
+job.submit(service_account="peakcart-vertex-pipelines@harsha-data-platform.iam.gserviceaccount.com")
+EOF
+```
+
+After a run succeeds and you've verified the deployed endpoint, undeploy
+and delete it the same way as the manual deployment above.
+
 ## Files
 
 ```
@@ -206,8 +299,11 @@ project-05-supply-chain-ml/
       sources/                           Declarations for bronze tables (own + reused from project-01)
       stockout_risk_features.sqlx        Leakage-free feature table (7-day-forward label)
       train_stockout_risk_model.sqlx     BQML CREATE MODEL, registers to Vertex AI on every run
+  pipelines/
+    stockout_risk_pipeline.py            KFP v2 pipeline: train -> evaluate -> conditional deploy
+    requirements.txt                     kfp / google-cloud-pipeline-components / google-cloud-aiplatform
   infrastructure/
-    terraform/                           Bronze BigQuery dataset, Vertex AI API enablement
-  screenshots/                           Vertex AI verification evidence
+    terraform/                           Bronze BigQuery dataset, Vertex AI API + pipelines bucket/SA
+  screenshots/                           Vertex AI + Vertex AI Pipelines verification evidence
   NOTES.md                               Dated build log (the "why", including the gotchas)
 ```
