@@ -93,3 +93,22 @@ Neither of these two bugs was visible from a single successful run -- both `stoc
 
 **Gotchas/issues hit:**
 None beyond the two described above.
+
+---
+
+## 2026-07-30 - Model Monitoring: config verified live, periodic scheduler stalled (documented limitation)
+
+**What I built/changed:**
+Created a `ModelDeploymentMonitoringJob` (`stockout-risk-monitoring-test`) against a fresh endpoint, with `trainingPredictionSkewDetectionConfig` on all 5 features (thresholds 0.1), `randomSampleConfig` at 100% sample rate, `monitorInterval`/`monitorWindow` at 3600s (the 1-hour minimum), and `emailAlertConfig` with `enableLogging: true`. Confirmed the training-side baseline computed correctly (GCS `training/stats_and_anomalies/<model_id>/stats/current_per_feature/` populated for every feature). Sent deliberately skewed prediction traffic directly to the endpoint (`qty_on_hand≈5000`, `rolling_7d_avg_demand≈400`, `price≈999`, all far outside training ranges) and confirmed via BigQuery that `serving_predict` was actually receiving rows (0 -> 1 -> 6 across two rounds of manual requests) -- this also caught and ruled out an initial false alarm where the *first* round of skewed traffic apparently never reached this specific endpoint at all (0 rows persisted for over an hour until I resent it directly and watched the count move).
+
+**Why this approach:**
+Same rigor as every other phase: confirm with independent evidence (actual row counts, actual GCS paths, actual log entries), not job/task `state` alone. This is what caught both the "traffic never landed" false alarm and the real issue below.
+
+**Key concept to remember (the real finding -- scheduler stall, not a wait-longer situation):**
+After serving traffic was confirmed logged, the periodic serving-side skew analysis never ran, even after 1.5+ hours against a 1-hour `monitorInterval`. Evidence it's a genuine stall rather than normal lag: `nextScheduleTime` and `updateTime` on the job were frozen at the exact same values (`19:00:00Z` / `19:24:23Z`) across every check spanning the full wait, `scheduleState` showed `OFFLINE` even while the job's own `state` showed `JOB_STATE_RUNNING`, no `serving/` GCS directory ever appeared alongside `training/`, no anomaly log entries appeared, and there were zero Cloud Logging entries and zero Dataflow jobs referencing this job at all beyond its initial creation. Training-side analysis clearly ran once (at creation); the periodic serving-side cycle never fired again after that. This reproduces the same pattern already documented for `avg_pick_time` on DirectRunner in project-04 (NOTES.md 2026-07-24) -- a platform/runner limitation that config and code can't work around, distinguished from a real bug by first proving every other piece (config correctness, logging pipeline, training baseline) works.
+
+**Decision:**
+Rather than keep an endpoint billing indefinitely chasing a scheduler that showed no sign of advancing, stopped after confirming config correctness + training baseline + live serving-log ingestion all work end-to-end -- three of the four pieces of the feature are independently verified live, with the periodic serving-side analysis documented as an unresolved platform-side gap rather than glossed over. Undeployed the model, paused (required before delete) and deleted the `ModelDeploymentMonitoringJob`, then deleted the endpoint. Confirmed via `GET` on both collections afterward that nothing remains.
+
+**Gotchas/issues hit:**
+A `ModelDeploymentMonitoringJob` cannot be deleted while `state: RUNNING` (`FAILED_PRECONDITION`) -- it must be paused first (`:pause`), which takes effect within a few seconds, before `DELETE` succeeds.

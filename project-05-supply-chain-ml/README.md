@@ -207,6 +207,37 @@ for real, deployed to the *same* reused endpoint (no duplicate
 endpoints), swapped traffic, served a correct live prediction. Endpoint
 undeployed and deleted afterward.
 
+### Model Monitoring: verified three of four pieces live, documented the fourth as a platform-side gap
+
+Created a `ModelDeploymentMonitoringJob` with training-serving skew
+detection on all 5 features, 100% request sampling, and the 1-hour
+minimum `monitorInterval`. Verified live, with independent evidence
+rather than trusting job state alone: the training-side baseline
+computed correctly (GCS stats populated per feature), and sending
+deliberately skewed traffic directly to the endpoint (`qty_on_hand`,
+`rolling_7d_avg_demand`, and `price` all far outside training ranges)
+was confirmed actually landing in BigQuery's `serving_predict` table
+(this also caught a false alarm: the first round of skewed traffic
+never reached the endpoint at all, distinguishable from the real issue
+below only by resending it and watching the row count move).
+
+What didn't work: the periodic serving-side skew analysis never fired,
+even after 1.5+ hours against a 1-hour interval. The job's own
+`nextScheduleTime`/`updateTime` were frozen at identical values across
+every check, `scheduleState` showed `OFFLINE` while `state` showed
+`RUNNING`, and no `serving/` GCS stats directory, anomaly log entry, or
+Dataflow job ever appeared beyond the initial training-baseline
+computation. Rather than leave a billing endpoint running indefinitely
+chasing a scheduler that showed no sign of advancing, stopped once
+config correctness, training baseline, and live serving-log ingestion
+were each independently confirmed, and documented the periodic-analysis
+stall as an unresolved platform-side limitation (see `NOTES.md`,
+2026-07-30) -- the same honest treatment given to the DirectRunner
+`avg_pick_time` limitation in project-04, rather than glossing over it.
+Endpoint undeployed, monitoring job paused then deleted (a
+`ModelDeploymentMonitoringJob` can't be deleted while `RUNNING`), and
+endpoint deleted -- confirmed via a follow-up `GET` that nothing remains.
+
 ## Verification Results
 
 | Check | Result |
@@ -219,6 +250,7 @@ undeployed and deleted afterward.
 | Cost discipline | Vertex AI endpoint created, verified, then undeployed and deleted -- nothing left running/billing |
 | Vertex AI Pipeline (Phase 4) | Full run succeeded: trained a fresh model version, evaluated it at ROC AUC 0.9006 (confirmed via the task's actual output value, not just its state), took the conditional deploy branch for real, served a correct live prediction from the pipeline-deployed endpoint, then torn down |
 | Scheduling | Bounded schedule (`max_run_count=1`) fired exactly once then permanently completed; surfaced and fixed two real bugs (silent caching, retrain-while-deployed conflict); final corrected run genuinely retrained to model version 3, reused the same endpoint (no duplicates), and served a correct prediction |
+| Model Monitoring | Config, training baseline, and live serving-log ingestion all independently verified; periodic serving-side skew analysis never fired after 1.5+ hrs (documented platform-side limitation, not a config issue); endpoint and monitoring job torn down |
 
 See `NOTES.md` for the full dated build log, including the BigQuery
 dataset immutable-rename gotcha and the explanation-preprocessing
