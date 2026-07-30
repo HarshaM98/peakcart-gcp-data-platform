@@ -62,6 +62,86 @@ WHERE date < '2025-11-01'
 
 @component(
     base_image="python:3.11",
+    packages_to_install=["google-auth==2.35.0", "requests==2.32.3"],
+)
+def undeploy_existing_model(
+    project_number: str,
+    location: str,
+    endpoint_display_name: str,
+) -> str:
+    """Undeploys whatever model is currently serving on endpoint_display_name
+    (if the endpoint exists at all), WITHOUT deleting the endpoint itself.
+
+    Must run before training: BQML refuses `CREATE OR REPLACE MODEL` while
+    that model is actively deployed to a Vertex AI endpoint --
+    `FAILED_PRECONDITION: The Model is deployed or being deployed at the
+    following Endpoint(s)... Please undeploy the model before retry.`
+    Found this the hard way on a live scheduled run: training failed
+    outright the second time the pipeline ran against an
+    already-successfully-deployed model. This does mean the endpoint has
+    no serving model for the duration of the retrain -- a real trade-off,
+    not hidden here. A zero-downtime version would train a new model
+    version under a different Vertex AI model resource and blue-green
+    swap it in, which is real added complexity this project didn't need
+    to take on to demonstrate the core gate (train -> evaluate -> deploy
+    only if good enough)."""
+    import google.auth
+    import google.auth.transport.requests
+    import requests
+
+    creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    creds.refresh(google.auth.transport.requests.Request())
+    headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
+
+    api_root = f"https://{location}-aiplatform.googleapis.com/v1"
+    base = f"{api_root}/projects/{project_number}/locations/{location}"
+
+    list_resp = requests.get(
+        f"{base}/endpoints",
+        headers=headers,
+        params={"filter": f'display_name="{endpoint_display_name}"'},
+    )
+    list_resp.raise_for_status()
+    existing_endpoints = list_resp.json().get("endpoints", [])
+
+    if not existing_endpoints:
+        print(f"No endpoint named {endpoint_display_name} yet -- nothing to undeploy.")
+        return "no-endpoint"
+
+    endpoint = existing_endpoints[0]
+    endpoint_id = endpoint["name"].split("/")[-1]
+    deployed_model_ids = [dm["id"] for dm in endpoint.get("deployedModels", [])]
+
+    if not deployed_model_ids:
+        print(f"Endpoint {endpoint['name']} exists but has nothing deployed.")
+        return "nothing-deployed"
+
+    for deployed_id in deployed_model_ids:
+        resp = requests.post(
+            f"{base}/endpoints/{endpoint_id}:undeployModel",
+            headers=headers,
+            json={"deployedModelId": deployed_id},
+        )
+        resp.raise_for_status()
+        op_name = resp.json()["name"]
+        while True:
+            import time
+
+            r = requests.get(f"{api_root}/{op_name}", headers=headers)
+            r.raise_for_status()
+            body = r.json()
+            if body.get("done"):
+                if "error" in body:
+                    raise RuntimeError(f"Undeploy failed: {body['error']}")
+                break
+            time.sleep(10)
+        print(f"Undeployed {deployed_id} from {endpoint['name']}")
+
+    return "undeployed"
+
+
+@component(
+    base_image="python:3.11",
     packages_to_install=["google-cloud-bigquery==3.42.2"],
 )
 def evaluate_model(project: str, location: str, dataset: str, model_name: str) -> float:
@@ -93,12 +173,25 @@ def deploy_model_without_explanations(
     vertex_model_id: str,
     endpoint_display_name: str,
 ) -> str:
-    """Creates a Vertex AI endpoint and deploys vertex_model_id to it with
-    disableExplanations=true. Calls the REST API directly because neither
-    `gcloud ai endpoints deploy-model` nor ModelDeployOp expose a way to
-    disable the auto-attached Shapley explanation spec that BQML gives
-    Vertex-AI-registered models -- deploying with it enabled fails with a
-    TensorFlow graph-version mismatch (see NOTES.md, Phase 3 entry)."""
+    """Deploys vertex_model_id to a stable, reused endpoint (identified by
+    endpoint_display_name) with disableExplanations=true, and undeploys
+    whatever model version was serving there before.
+
+    Calls the REST API directly because neither `gcloud ai endpoints
+    deploy-model` nor ModelDeployOp expose a way to disable the
+    auto-attached Shapley explanation spec that BQML gives Vertex-AI-
+    registered models -- deploying with it enabled fails with a
+    TensorFlow graph-version mismatch (see NOTES.md, Phase 3 entry).
+
+    Reuses an existing endpoint with this display name instead of always
+    creating a new one -- necessary for scheduled/recurring runs, since
+    otherwise every successful retrain would spin up another live,
+    billing endpoint that accumulates indefinitely. Uses the documented
+    "0" placeholder key in trafficSplit to mean "the model being deployed
+    by this call" (its real deployed-model ID doesn't exist yet at
+    request time), giving it 100% traffic while dropping any existing
+    deployed model to 0%, then explicitly undeploys that old one so it
+    stops serving (and billing) entirely rather than sitting idle."""
     import time
 
     import google.auth
@@ -123,13 +216,34 @@ def deploy_model_without_explanations(
                 return body["response"]
             time.sleep(poll_seconds)
 
-    create_resp = requests.post(
-        f"{base}/endpoints", headers=headers, json={"displayName": endpoint_display_name}
+    list_resp = requests.get(
+        f"{base}/endpoints",
+        headers=headers,
+        params={"filter": f'display_name="{endpoint_display_name}"'},
     )
-    create_resp.raise_for_status()
-    endpoint = wait_for_operation(create_resp.json()["name"], poll_seconds=10)
-    endpoint_name = endpoint["name"]
-    endpoint_id = endpoint_name.split("/")[-1]
+    list_resp.raise_for_status()
+    existing_endpoints = list_resp.json().get("endpoints", [])
+
+    if existing_endpoints:
+        endpoint = existing_endpoints[0]
+        endpoint_name = endpoint["name"]
+        endpoint_id = endpoint_name.split("/")[-1]
+        old_deployed_model_ids = [dm["id"] for dm in endpoint.get("deployedModels", [])]
+        print(f"Reusing existing endpoint {endpoint_name} (old deployed models: {old_deployed_model_ids})")
+    else:
+        create_resp = requests.post(
+            f"{base}/endpoints", headers=headers, json={"displayName": endpoint_display_name}
+        )
+        create_resp.raise_for_status()
+        endpoint = wait_for_operation(create_resp.json()["name"], poll_seconds=10)
+        endpoint_name = endpoint["name"]
+        endpoint_id = endpoint_name.split("/")[-1]
+        old_deployed_model_ids = []
+        print(f"Created new endpoint {endpoint_name}")
+
+    traffic_split = {"0": 100}
+    for old_id in old_deployed_model_ids:
+        traffic_split[old_id] = 0
 
     deploy_body = {
         "deployedModel": {
@@ -141,15 +255,26 @@ def deploy_model_without_explanations(
                 "maxReplicaCount": 1,
             },
             "disableExplanations": True,
-        }
+        },
+        "trafficSplit": traffic_split,
     }
     deploy_resp = requests.post(
         f"{base}/endpoints/{endpoint_id}:deployModel", headers=headers, json=deploy_body
     )
     deploy_resp.raise_for_status()
     wait_for_operation(deploy_resp.json()["name"], poll_seconds=20)
+    print(f"Deployed new version of {vertex_model_id} to endpoint {endpoint_name}, traffic shifted to it")
 
-    print(f"Deployed {vertex_model_id} to endpoint {endpoint_name}")
+    for old_id in old_deployed_model_ids:
+        undeploy_resp = requests.post(
+            f"{base}/endpoints/{endpoint_id}:undeployModel",
+            headers=headers,
+            json={"deployedModelId": old_id},
+        )
+        undeploy_resp.raise_for_status()
+        wait_for_operation(undeploy_resp.json()["name"], poll_seconds=10)
+        print(f"Undeployed old model version {old_id}")
+
     return endpoint_name
 
 
@@ -161,12 +286,34 @@ def stockout_risk_pipeline(
     roc_auc_threshold: float = 0.8,
     endpoint_display_name: str = "stockout-risk-endpoint-pipeline",
 ):
+    # Caching is disabled on every task here deliberately: Vertex AI
+    # Pipelines caches a task's execution whenever its inputs match a
+    # prior run, REGARDLESS of side effects. With fixed parameter
+    # defaults (the normal case for a recurring schedule), every
+    # subsequent run's inputs are identical to the first, so the default
+    # (enabled) caching silently no-ops the entire pipeline forever --
+    # confirmed live: a second run reused the first run's cached
+    # deploy-model-without-explanations output unchanged, meaning nothing
+    # was actually retrained, evaluated, or redeployed. Training and
+    # evaluation need to rerun to reflect new data; deployment is a real
+    # side effect (swapping live traffic) that must never be silently
+    # skipped.
+    undeploy_task = undeploy_existing_model(
+        project_number=PROJECT_NUMBER,
+        location=LOCATION,
+        endpoint_display_name=endpoint_display_name,
+    )
+    undeploy_task.set_display_name("undeploy-existing-model-before-retrain")
+    undeploy_task.set_caching_options(False)
+
     train_task = BigqueryCreateModelJobOp(
         query=TRAIN_QUERY,
         location=LOCATION,
         project=PROJECT_ID,
     )
+    train_task.after(undeploy_task)
     train_task.set_display_name("train-stockout-risk-model")
+    train_task.set_caching_options(False)
 
     evaluate_task = evaluate_model(
         project=PROJECT_ID,
@@ -176,6 +323,7 @@ def stockout_risk_pipeline(
     )
     evaluate_task.after(train_task)
     evaluate_task.set_display_name("evaluate-on-held-out-period")
+    evaluate_task.set_caching_options(False)
 
     with dsl.If(evaluate_task.output >= roc_auc_threshold, name="deploy-if-good-enough"):
         deploy_task = deploy_model_without_explanations(
@@ -185,6 +333,7 @@ def stockout_risk_pipeline(
             endpoint_display_name=endpoint_display_name,
         )
         deploy_task.set_display_name("deploy-to-endpoint")
+        deploy_task.set_caching_options(False)
 
 
 if __name__ == "__main__":

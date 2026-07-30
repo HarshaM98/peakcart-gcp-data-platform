@@ -72,3 +72,24 @@ A **third**, separate failure (between fixing #1 and discovering #2) was `Permis
 
 **Gotchas/issues hit:**
 None beyond the three above -- once both the pipeline's own service account and the hidden tenant training SA had the right BigQuery roles, the run succeeded on the first subsequent attempt.
+
+---
+
+## 2026-07-30 - Pipeline scheduling: caching and retrain-while-deployed both had to be fixed
+
+**What I built/changed:**
+Created a Vertex AI `PipelineJobSchedule` (`pipeline_job.create_schedule(cron="* * * * *", max_run_count=1, ...)`) to prove out real recurring-pipeline mechanics without leaving anything running unattended -- `max_run_count=1` means the schedule fires exactly once then permanently transitions to `COMPLETED` (confirmed: `started_run_count=1`, state `COMPLETED`, can never fire again). Along the way, found and fixed two real bugs in the Phase 4 pipeline that only show up on a *second* run against the same parameters -- exactly the scenario a recurring schedule creates and a one-off manual run never would have caught:
+
+1. **Silent full-pipeline caching.** The scheduled run's `bigquery-create-model-job` and `evaluate-model` tasks came back `SKIPPED`, and a subsequent manual run skipped *every* task including the deploy step -- confirmed by diffing the deploy task's output artifact (`endpoints/3842208748646957056`, byte-identical to the prior run) and the endpoint itself (completely unchanged `createTime`/deployed-model ID). Root cause: Vertex AI Pipelines caches a task's execution whenever its inputs match a prior run, **regardless of side effects** -- with fixed default parameter values (the normal shape of a recurring schedule), every run's inputs are identical to the first, so nothing ever actually re-executes. Confirmed via the compiled IR: the old spec showed `"cachingOptions": {"enableCache": true}` explicitly; after calling `.set_caching_options(False)` on all three tasks, the new spec shows `"cachingOptions": {}` -- proto3's way of representing the non-default `enableCache: false` (false is the field default, so it's omitted from JSON rather than explicitly written).
+2. **BQML refuses to retrain a deployed model.** With caching fixed, the very next run failed for a completely different, more fundamental reason: `CREATE OR REPLACE MODEL` returned `FAILED_PRECONDITION: The Model is deployed or being deployed at the following Endpoint(s)... Please undeploy the model before retry.` BQML won't let you replace a model resource while it's actively backing a live Vertex AI deployment. Added a new first pipeline step, `undeploy_existing_model`, that finds the target endpoint (if it exists) and undeploys whatever's currently serving there -- *before* training runs -- so retraining is never blocked by the pipeline's own prior successful deployment.
+
+With both fixed, a clean end-to-end run: undeployed the old model (id `4797306121184346112`) -> retrained (genuinely, not cached -- **model version 3**, not still version 2) -> evaluated for real -> deployed version 3 to the *same* reused endpoint (id `7170703124808597504`) -> traffic swapped 100% -> live prediction confirmed correct (89.4% risk, matching every prior test). Undeployed and deleted the endpoint afterward; the schedule was already permanently `COMPLETED` from its one bounded firing.
+
+**Why this approach:**
+Deliberately did NOT try to build a zero-downtime blue-green swap (train a new model version under a separate alias, deploy it, then retire the old one only after the new one is confirmed healthy) -- that's the real production-grade fix for the "retrain while serving" conflict, but it's real added complexity this project didn't need to take on just to demonstrate the core MLOps gate (train -> evaluate -> deploy only if good enough). Documenting the trade-off directly in the `undeploy_existing_model` docstring instead of hiding it: this pipeline has a real serving gap during every retrain cycle, by design, not by oversight.
+
+**Key concept to remember:**
+Neither of these two bugs was visible from a single successful run -- both `stockout-risk-pipeline-run-4` (Phase 4's original verification) and the first scheduled firing looked completely fine in isolation. They only surfaced on the *second* execution against unchanged parameters, which is precisely the situation a real recurring schedule creates and a one-off demo never exercises. Worth remembering generally: verifying a pipeline is idempotent/safe to rerun is a different (and necessary) test from verifying it works once.
+
+**Gotchas/issues hit:**
+None beyond the two described above.
