@@ -55,6 +55,23 @@ deploy-if-good-enough (dsl.If roc_auc >= threshold)
   |
   v
 deploy-to-endpoint (custom component, Vertex AI REST API, disableExplanations=true)
+
+
+-- Scheduling: the same pipeline, safe to run repeatedly --
+
+undeploy-existing-model (frees the model resource so it can be retrained)
+  |
+  v
+train-stockout-risk-model  (caching explicitly disabled on every task below)
+  |
+  v
+evaluate-on-held-out-period
+  |
+  v
+deploy-if-good-enough -> deploy-to-endpoint (reuses one endpoint, swaps traffic, undeploys the old version)
+  |
+  v
+Vertex AI PipelineJobSchedule (bounded: max_run_count=1, verified via started_run_count, then permanently COMPLETED)
 ```
 
 ## Key Technical Decisions
@@ -154,6 +171,42 @@ and the Dataflow explanation-preprocessing failure in this project's
 Phase 3. Full troubleshooting log, including a separate IAM-propagation-delay
 red herring in between, is in `NOTES.md`.
 
+### Scheduling surfaced two bugs a one-off run can't catch
+
+A `PipelineJobSchedule` was created bounded (`max_run_count=1`, a
+one-minute cron so it fires almost immediately, verified via
+`started_run_count` and its permanent `COMPLETED` state afterward --
+never left running unattended). Both problems below only appear on a
+*second* run against the same parameters, which is exactly what a
+schedule does and a single manual demo run never exercises:
+
+1. **Silent full-pipeline caching.** Vertex AI Pipelines caches a task's
+   execution whenever its inputs match a prior run, *regardless of side
+   effects*. With fixed default parameters (the normal shape of a
+   schedule), every run's inputs are identical to the first, so nothing
+   ever actually re-executes -- confirmed live via a deploy step that
+   returned the exact same endpoint reference as the prior run, and an
+   endpoint that was completely unchanged. Fixed with
+   `task.set_caching_options(False)` on the train, evaluate, and deploy
+   tasks.
+2. **BQML refuses to retrain a deployed model.** With caching fixed, the
+   very next run failed outright: `FAILED_PRECONDITION: The Model is
+   deployed or being deployed at the following Endpoint(s)... Please
+   undeploy the model before retry.` Added a new first pipeline step,
+   `undeploy_existing_model`, that undeploys whatever is currently
+   serving before training starts. This means a real serving gap during
+   every retrain cycle -- a deliberate, documented trade-off, not hidden;
+   a zero-downtime blue-green swap (a new model version under a separate
+   alias, promoted only after it's confirmed healthy) is the real
+   production-grade fix, but more complexity than this project needs to
+   demonstrate the core gate.
+
+Verified clean end-to-end with both fixes: undeployed the old model,
+genuinely retrained (model version 3, not a reused version 2), evaluated
+for real, deployed to the *same* reused endpoint (no duplicate
+endpoints), swapped traffic, served a correct live prediction. Endpoint
+undeployed and deleted afterward.
+
 ## Verification Results
 
 | Check | Result |
@@ -165,6 +218,7 @@ red herring in between, is in `NOTES.md`.
 | Live online prediction | 89.4% stockout-risk probability for a low-stock/high-lead-time example, identical across `ML.PREDICT`, a direct REST call, and the console UI |
 | Cost discipline | Vertex AI endpoint created, verified, then undeployed and deleted -- nothing left running/billing |
 | Vertex AI Pipeline (Phase 4) | Full run succeeded: trained a fresh model version, evaluated it at ROC AUC 0.9006 (confirmed via the task's actual output value, not just its state), took the conditional deploy branch for real, served a correct live prediction from the pipeline-deployed endpoint, then torn down |
+| Scheduling | Bounded schedule (`max_run_count=1`) fired exactly once then permanently completed; surfaced and fixed two real bugs (silent caching, retrain-while-deployed conflict); final corrected run genuinely retrained to model version 3, reused the same endpoint (no duplicates), and served a correct prediction |
 
 See `NOTES.md` for the full dated build log, including the BigQuery
 dataset immutable-rename gotcha and the explanation-preprocessing
@@ -196,6 +250,22 @@ The `evaluate-model` step's own logged output, confirming the ROC AUC value:
 The full runs list, including the 3 failed attempts from troubleshooting the IAM issues:
 
 ![Pipeline runs list, showing failures then success](screenshots/vertex_pipeline_runs_list.png)
+
+The bounded Schedule, permanently `Completed` after its one verified firing:
+
+![Schedule detail page, status Completed](screenshots/vertex_pipeline_schedule_completed.png)
+
+A run hitting the caching bug -- note the distinct cached-icon nodes and "Execution Info: Cached":
+
+![Pipeline run with cached (skipped) nodes](screenshots/vertex_pipeline_run_cached_nodes.png)
+
+The final corrected run, 5/5 steps (including the new `undeploy-existing-model` step), all genuinely green:
+
+![Final corrected pipeline run, all steps green](screenshots/vertex_pipeline_run_final_fixed_5steps.png)
+
+The complete runs history across all scheduling/troubleshooting attempts:
+
+![Full pipeline runs history](screenshots/vertex_pipeline_runs_list_full_history.png)
 
 ## How to Run
 
@@ -289,6 +359,33 @@ EOF
 After a run succeeds and you've verified the deployed endpoint, undeploy
 and delete it the same way as the manual deployment above.
 
+### Create a bounded schedule (verify, don't leave it running)
+
+```bash
+source ~/.venv/vertex-pipelines-env/bin/activate
+cd pipelines
+python3 - <<'EOF'
+from google.cloud import aiplatform
+
+aiplatform.init(project="harsha-data-platform", location="us-central1")
+pipeline_job = aiplatform.PipelineJob(
+    display_name="stockout-risk-pipeline-scheduled",
+    template_path="stockout_risk_pipeline.json",
+    pipeline_root="gs://peakcart-vertex-pipelines-2026/pipeline-root",
+    parameter_values={"roc_auc_threshold": 0.8, "endpoint_display_name": "stockout-risk-endpoint-pipeline"},
+)
+# max_run_count bounds it -- fires this many times then permanently
+# transitions to COMPLETED, rather than running indefinitely unattended.
+schedule = pipeline_job.create_schedule(
+    cron="0 3 * * 1",  # e.g. weekly, Mondays 3am UTC
+    display_name="stockout-risk-weekly-retrain",
+    max_run_count=4,
+    service_account="peakcart-vertex-pipelines@harsha-data-platform.iam.gserviceaccount.com",
+)
+print(schedule.resource_name)
+EOF
+```
+
 ## Files
 
 ```
@@ -300,7 +397,7 @@ project-05-supply-chain-ml/
       stockout_risk_features.sqlx        Leakage-free feature table (7-day-forward label)
       train_stockout_risk_model.sqlx     BQML CREATE MODEL, registers to Vertex AI on every run
   pipelines/
-    stockout_risk_pipeline.py            KFP v2 pipeline: train -> evaluate -> conditional deploy
+    stockout_risk_pipeline.py            KFP v2 pipeline: undeploy -> train -> evaluate -> conditional deploy (caching disabled, safe to schedule/rerun)
     requirements.txt                     kfp / google-cloud-pipeline-components / google-cloud-aiplatform
   infrastructure/
     terraform/                           Bronze BigQuery dataset, Vertex AI API + pipelines bucket/SA
