@@ -1,0 +1,361 @@
+{
+  "components": {
+    "comp-bigquery-create-model-job": {
+      "executorLabel": "exec-bigquery-create-model-job",
+      "inputDefinitions": {
+        "parameters": {
+          "job_configuration_query": {
+            "defaultValue": {},
+            "description": "A json formatted string describing the rest of the job configuration. For more details, see https://cloud.google.com/bigquery/docs/reference/rest/v2/Job#JobConfigurationQuery",
+            "isOptional": true,
+            "parameterType": "STRUCT"
+          },
+          "labels": {
+            "defaultValue": {},
+            "description": "The labels associated with this job. You can use these to organize and group your jobs. Label keys and values can be no longer than 63 characters, can only containlowercase letters, numeric characters, underscores and dashes. International characters are allowed. Label values are optional. Label keys must start with a letter and each label in the list must have a different key.\nExample: { \"name\": \"wrench\", \"mass\": \"1.3kg\", \"count\": \"3\" }.",
+            "isOptional": true,
+            "parameterType": "STRUCT"
+          },
+          "location": {
+            "defaultValue": "us-central1",
+            "description": "Location of the job to create the BigQuery model. If not set, default to `US` multi-region.  For more details, see https://cloud.google.com/bigquery/docs/locations#specifying_your_location",
+            "isOptional": true,
+            "parameterType": "STRING"
+          },
+          "project": {
+            "defaultValue": "{{$.pipeline_google_cloud_project_id}}",
+            "description": "Project to run BigQuery model creation job. Defaults to the project in which the PipelineJob is run.",
+            "isOptional": true,
+            "parameterType": "STRING"
+          },
+          "query": {
+            "description": "SQL query text to execute. Only standard SQL is supported.  If query are both specified in here and in job_configuration_query, the value in here will override the other one.",
+            "parameterType": "STRING"
+          },
+          "query_parameters": {
+            "defaultValue": [],
+            "description": "Query parameters for standard SQL queries. If query_parameters are both specified in here and in job_configuration_query, the value in here will override the other one.",
+            "isOptional": true,
+            "parameterType": "LIST"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "artifacts": {
+          "model": {
+            "artifactType": {
+              "schemaTitle": "google.BQMLModel",
+              "schemaVersion": "0.0.1"
+            },
+            "description": "Describes the model which is created."
+          }
+        },
+        "parameters": {
+          "gcp_resources": {
+            "description": "Serialized gcp_resources proto tracking the BigQuery job. For more details, see https://github.com/kubeflow/pipelines/blob/master/components/google-cloud/google_cloud_pipeline_components/proto/README.md.",
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-condition-1": {
+      "dag": {
+        "tasks": {
+          "deploy-model-without-explanations": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-deploy-model-without-explanations"
+            },
+            "inputs": {
+              "parameters": {
+                "endpoint_display_name": {
+                  "componentInputParameter": "pipelinechannel--endpoint_display_name"
+                },
+                "location": {
+                  "runtimeValue": {
+                    "constant": "us-central1"
+                  }
+                },
+                "project_number": {
+                  "runtimeValue": {
+                    "constant": "435348575003"
+                  }
+                },
+                "vertex_model_id": {
+                  "runtimeValue": {
+                    "constant": "stockout-risk-model"
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "deploy-to-endpoint"
+            }
+          }
+        }
+      },
+      "inputDefinitions": {
+        "parameters": {
+          "pipelinechannel--endpoint_display_name": {
+            "parameterType": "STRING"
+          },
+          "pipelinechannel--evaluate-model-Output": {
+            "parameterType": "NUMBER_DOUBLE"
+          },
+          "pipelinechannel--roc_auc_threshold": {
+            "parameterType": "NUMBER_DOUBLE"
+          }
+        }
+      }
+    },
+    "comp-deploy-model-without-explanations": {
+      "executorLabel": "exec-deploy-model-without-explanations",
+      "inputDefinitions": {
+        "parameters": {
+          "endpoint_display_name": {
+            "parameterType": "STRING"
+          },
+          "location": {
+            "parameterType": "STRING"
+          },
+          "project_number": {
+            "parameterType": "STRING"
+          },
+          "vertex_model_id": {
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "parameters": {
+          "Output": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-evaluate-model": {
+      "executorLabel": "exec-evaluate-model",
+      "inputDefinitions": {
+        "parameters": {
+          "dataset": {
+            "parameterType": "STRING"
+          },
+          "location": {
+            "parameterType": "STRING"
+          },
+          "model_name": {
+            "parameterType": "STRING"
+          },
+          "project": {
+            "parameterType": "STRING"
+          }
+        }
+      },
+      "outputDefinitions": {
+        "parameters": {
+          "Output": {
+            "parameterType": "NUMBER_DOUBLE"
+          }
+        }
+      }
+    }
+  },
+  "deploymentSpec": {
+    "executors": {
+      "exec-bigquery-create-model-job": {
+        "container": {
+          "args": [
+            "--type",
+            "BigqueryCreateModelJob",
+            "--project",
+            "{{$.inputs.parameters['project']}}",
+            "--location",
+            "{{$.inputs.parameters['location']}}",
+            "--payload",
+            "{\"Concat\": [\"{\", \"\\\"configuration\\\": {\", \"\\\"query\\\": \", \"{{$.inputs.parameters['job_configuration_query']}}\", \", \\\"labels\\\": \", \"{{$.inputs.parameters['labels']}}\", \"}\", \"}\"]}",
+            "--job_configuration_query_override",
+            "{\"Concat\": [\"{\", \"\\\"query\\\": \\\"\", \"{{$.inputs.parameters['query']}}\", \"\\\"\", \", \\\"query_parameters\\\": \", \"{{$.inputs.parameters['query_parameters']}}\", \"}\"]}",
+            "--gcp_resources",
+            "{{$.outputs.parameters['gcp_resources'].output_file}}",
+            "--executor_input",
+            "{{$}}"
+          ],
+          "command": [
+            "python3",
+            "-u",
+            "-m",
+            "google_cloud_pipeline_components.container.v1.bigquery.create_model.launcher"
+          ],
+          "image": "gcr.io/ml-pipeline/google-cloud-pipeline-components:2.22.0"
+        }
+      },
+      "exec-deploy-model-without-explanations": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "deploy_model_without_explanations"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-auth==2.35.0' 'requests==2.32.3'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef deploy_model_without_explanations(\n    project_number: str,\n    location: str,\n    vertex_model_id: str,\n    endpoint_display_name: str,\n) -> str:\n    \"\"\"Creates a Vertex AI endpoint and deploys vertex_model_id to it with\n    disableExplanations=true. Calls the REST API directly because neither\n    `gcloud ai endpoints deploy-model` nor ModelDeployOp expose a way to\n    disable the auto-attached Shapley explanation spec that BQML gives\n    Vertex-AI-registered models -- deploying with it enabled fails with a\n    TensorFlow graph-version mismatch (see NOTES.md, Phase 3 entry).\"\"\"\n    import time\n\n    import google.auth\n    import google.auth.transport.requests\n    import requests\n\n    creds, _ = google.auth.default(scopes=[\"https://www.googleapis.com/auth/cloud-platform\"])\n    creds.refresh(google.auth.transport.requests.Request())\n    headers = {\"Authorization\": f\"Bearer {creds.token}\", \"Content-Type\": \"application/json\"}\n\n    api_root = f\"https://{location}-aiplatform.googleapis.com/v1\"\n    base = f\"{api_root}/projects/{project_number}/locations/{location}\"\n\n    def wait_for_operation(operation_name, poll_seconds):\n        while True:\n            r = requests.get(f\"{api_root}/{operation_name}\", headers=headers)\n            r.raise_for_status()\n            body = r.json()\n            if body.get(\"done\"):\n                if \"error\" in body:\n                    raise RuntimeError(f\"Operation {operation_name} failed: {body['error']}\")\n                return body[\"response\"]\n            time.sleep(poll_seconds)\n\n    create_resp = requests.post(\n        f\"{base}/endpoints\", headers=headers, json={\"displayName\": endpoint_display_name}\n    )\n    create_resp.raise_for_status()\n    endpoint = wait_for_operation(create_resp.json()[\"name\"], poll_seconds=10)\n    endpoint_name = endpoint[\"name\"]\n    endpoint_id = endpoint_name.split(\"/\")[-1]\n\n    deploy_body = {\n        \"deployedModel\": {\n            \"model\": f\"projects/{project_number}/locations/{location}/models/{vertex_model_id}\",\n            \"displayName\": f\"{vertex_model_id}-deployment\",\n            \"dedicatedResources\": {\n                \"machineSpec\": {\"machineType\": \"n1-standard-2\"},\n                \"minReplicaCount\": 1,\n                \"maxReplicaCount\": 1,\n            },\n            \"disableExplanations\": True,\n        }\n    }\n    deploy_resp = requests.post(\n        f\"{base}/endpoints/{endpoint_id}:deployModel\", headers=headers, json=deploy_body\n    )\n    deploy_resp.raise_for_status()\n    wait_for_operation(deploy_resp.json()[\"name\"], poll_seconds=20)\n\n    print(f\"Deployed {vertex_model_id} to endpoint {endpoint_name}\")\n    return endpoint_name\n\n"
+          ],
+          "image": "python:3.11"
+        }
+      },
+      "exec-evaluate-model": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "evaluate_model"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery==3.42.2'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef evaluate_model(project: str, location: str, dataset: str, model_name: str) -> float:\n    \"\"\"Runs ML.EVALUATE on the held-out Nov-Dec period (never trained on)\n    and returns roc_auc as a plain float the pipeline can branch on.\"\"\"\n    from google.cloud import bigquery\n\n    client = bigquery.Client(project=project, location=location)\n    query = f\"\"\"\n    SELECT roc_auc\n    FROM ML.EVALUATE(MODEL `{project}.{dataset}.{model_name}`,\n      (SELECT qty_on_hand, rolling_7d_avg_demand, lead_time_days, category, price, stockout_next_7d\n       FROM `{project}.{dataset}.stockout_risk_features`\n       WHERE date >= '2025-11-01'))\n    \"\"\"\n    row = list(client.query(query).result())[0]\n    roc_auc = float(row.roc_auc)\n    print(f\"ROC AUC on held-out Nov-Dec period: {roc_auc}\")\n    return roc_auc\n\n"
+          ],
+          "image": "python:3.11"
+        }
+      }
+    }
+  },
+  "pipelineInfo": {
+    "description": "Trains the stockout risk model, evaluates it on held-out future data, and deploys it only if it clears a quality bar.",
+    "name": "stockout-risk-training-pipeline"
+  },
+  "root": {
+    "dag": {
+      "tasks": {
+        "bigquery-create-model-job": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-bigquery-create-model-job"
+          },
+          "inputs": {
+            "parameters": {
+              "location": {
+                "runtimeValue": {
+                  "constant": "us-central1"
+                }
+              },
+              "project": {
+                "runtimeValue": {
+                  "constant": "harsha-data-platform"
+                }
+              },
+              "query": {
+                "runtimeValue": {
+                  "constant": "\nCREATE OR REPLACE MODEL `harsha-data-platform.peakcart_supply_chain_features.stockout_risk_model`\nOPTIONS (\n  model_type = 'LOGISTIC_REG',\n  input_label_cols = ['stockout_next_7d'],\n  auto_class_weights = true,\n  model_registry = 'vertex_ai',\n  vertex_ai_model_id = 'stockout-risk-model',\n  vertex_ai_model_version_aliases = ['pipeline']\n) AS\nSELECT\n  qty_on_hand,\n  rolling_7d_avg_demand,\n  lead_time_days,\n  category,\n  price,\n  stockout_next_7d\nFROM `harsha-data-platform.peakcart_supply_chain_features.stockout_risk_features`\nWHERE date < '2025-11-01'\n"
+                }
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "train-stockout-risk-model"
+          }
+        },
+        "condition-1": {
+          "componentRef": {
+            "name": "comp-condition-1"
+          },
+          "dependentTasks": [
+            "evaluate-model"
+          ],
+          "inputs": {
+            "parameters": {
+              "pipelinechannel--endpoint_display_name": {
+                "componentInputParameter": "endpoint_display_name"
+              },
+              "pipelinechannel--evaluate-model-Output": {
+                "taskOutputParameter": {
+                  "outputParameterKey": "Output",
+                  "producerTask": "evaluate-model"
+                }
+              },
+              "pipelinechannel--roc_auc_threshold": {
+                "componentInputParameter": "roc_auc_threshold"
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "deploy-if-good-enough"
+          },
+          "triggerPolicy": {
+            "condition": "inputs.parameter_values['pipelinechannel--evaluate-model-Output'] >= inputs.parameter_values['pipelinechannel--roc_auc_threshold']"
+          }
+        },
+        "evaluate-model": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-evaluate-model"
+          },
+          "dependentTasks": [
+            "bigquery-create-model-job"
+          ],
+          "inputs": {
+            "parameters": {
+              "dataset": {
+                "runtimeValue": {
+                  "constant": "peakcart_supply_chain_features"
+                }
+              },
+              "location": {
+                "runtimeValue": {
+                  "constant": "us-central1"
+                }
+              },
+              "model_name": {
+                "runtimeValue": {
+                  "constant": "stockout_risk_model"
+                }
+              },
+              "project": {
+                "runtimeValue": {
+                  "constant": "harsha-data-platform"
+                }
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "evaluate-on-held-out-period"
+          }
+        }
+      }
+    },
+    "inputDefinitions": {
+      "parameters": {
+        "endpoint_display_name": {
+          "defaultValue": "stockout-risk-endpoint-pipeline",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "roc_auc_threshold": {
+          "defaultValue": 0.8,
+          "isOptional": true,
+          "parameterType": "NUMBER_DOUBLE"
+        }
+      }
+    }
+  },
+  "schemaVersion": "2.1.0",
+  "sdkVersion": "kfp-2.17.0"
+}

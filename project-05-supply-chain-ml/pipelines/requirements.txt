@@ -1,0 +1,3 @@
+kfp==2.17.0
+google-cloud-pipeline-components==2.22.0
+google-cloud-aiplatform==1.163.0

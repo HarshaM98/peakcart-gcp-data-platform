@@ -41,3 +41,29 @@ module "bronze" {
   }
   writers = var.dataset_writers
 }
+
+# Vertex AI Pipelines requires a GCS "pipeline root" for compiled pipeline
+# specs and step artifacts -- scratch space, not durable data, so a short
+# lifecycle rule is appropriate (same reasoning as the Dataflow staging
+# bucket in project-04).
+resource "google_storage_bucket" "vertex_pipelines" {
+  name                        = "peakcart-vertex-pipelines-2026"
+  location                    = var.region
+  force_destroy               = true
+  uniform_bucket_level_access = true
+
+  lifecycle_rule {
+    condition {
+      age = 14
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  labels = {
+    project = "project05"
+    domain  = "supply_chain_ml"
+    purpose = "vertex_pipelines"
+  }
+}
