@@ -1,0 +1,85 @@
+name: project-05 CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'project-05-supply-chain-ml/dataform/**'
+      - 'project-05-supply-chain-ml/infrastructure/terraform/**'
+      - 'project-05-supply-chain-ml/pipelines/**'
+      - 'shared/data-generators/generate_project05_data.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'project-05-supply-chain-ml/dataform/**'
+      - 'project-05-supply-chain-ml/infrastructure/terraform/**'
+      - 'project-05-supply-chain-ml/pipelines/**'
+      - 'shared/data-generators/generate_project05_data.py'
+  workflow_dispatch: {}
+
+jobs:
+  dataform-compile:
+    name: Dataform compile check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Compile Dataform project
+        working-directory: project-05-supply-chain-ml/dataform
+        run: npx --yes @dataform/cli@3 compile .
+
+  terraform-check:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.0'
+
+      - name: Terraform fmt check
+        working-directory: project-05-supply-chain-ml/infrastructure/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend, no credentials needed)
+        working-directory: project-05-supply-chain-ml/infrastructure/terraform
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        working-directory: project-05-supply-chain-ml/infrastructure/terraform
+        run: terraform validate
+
+  pipeline-compile:
+    name: KFP pipeline compile + generator syntax check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pipeline dependencies
+        working-directory: project-05-supply-chain-ml/pipelines
+        run: pip install -r requirements.txt
+
+      - name: Compile the Vertex AI Pipeline (local, no GCP credentials needed)
+        working-directory: project-05-supply-chain-ml/pipelines
+        run: python3 stockout_risk_pipeline.py
+
+      - name: Syntax-check the data generator
+        run: python3 -m py_compile shared/data-generators/generate_project05_data.py
