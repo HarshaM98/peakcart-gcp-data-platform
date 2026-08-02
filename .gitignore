@@ -26,6 +26,7 @@ gcp-key*.json
 
 # Terraform
 .terraform/
+.terraform-tmp/
 *.tfstate
 *.tfstate.backup
 
