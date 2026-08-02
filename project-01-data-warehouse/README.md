@@ -239,7 +239,7 @@ advanced-sql/ 5 interview-ready analytical queries
 shared/
 data-generators/
 generate_peakcart_data.py generates all sample CSVs
-diagrams/
+screenshots/
 project-01-lineage-full-dag.png
 project-01-lineage-fact-orders.png
 
