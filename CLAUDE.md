@@ -12,7 +12,7 @@ GCP project id: `harsha-data-platform`.
 | #   | Project                      | Status      | Key tech                                                   |
 | --- | ---------------------------- | ----------- | ---------------------------------------------------------- |
 | 1   | `project-01-data-warehouse`  | Built       | BigQuery, GCS, dbt Core, Terraform, Medallion architecture |
-| 2   | `project-02-cloud-migration` | Not started | Dataflow, Dataproc, Cloud Composer, PostgreSQL             |
+| 2   | `project-02-cloud-migration` | Built       | Dataproc, Datastream, Cloud Composer, PostgreSQL, Cloud SQL |
 | 3   | `project-03-customer-360`    | Built       | AlloyDB, dbt, Cloud Composer, Looker Studio                |
 | 4   | `project-04-realtime-ops`    | Built       | Pub/Sub, Dataflow (Apache Beam) streaming, BigQuery        |
 | 5   | `project-05-supply-chain-ml` | Built       | Dataform, BigQuery ML, Vertex AI                           |

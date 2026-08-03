@@ -7,7 +7,7 @@ End-to-end GCP data engineering portfolio built on PeakCart, a fictional grocery
 | # | Project | Key Technologies |
 |---|---------|-----------------|
 | 1 | Data Warehouse Foundation | BigQuery, GCS, dbt, Medallion Architecture |
-| 2 | Cloud Migration Simulator | Dataflow, Dataproc, Cloud Composer, PostgreSQL |
+| 2 | Cloud Migration Simulator | Dataproc, Datastream, Cloud Composer, Cloud SQL (PostgreSQL) |
 | 3 | Customer 360 Platform | AlloyDB, dbt, Pub/Sub, BI dashboards |
 | 4 | Real-time Operational Intelligence | Pub/Sub, Dataflow Streaming, BigQuery |
 | 5 | Supply Chain ML Integration | Dataform, BigQuery ML, Vertex AI |
