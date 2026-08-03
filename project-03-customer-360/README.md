@@ -7,6 +7,16 @@ clickstream behavior, delivery feedback, and demographics into a single
 analytical model. Built on GCP using BigQuery, dbt, AlloyDB, and
 Cloud Composer.
 
+> **Note on infrastructure-as-code.** Unlike the other projects here, this one
+> has **no Terraform**. The AlloyDB cluster, the Cloud Composer environment,
+> and the Looker Studio dashboard were all provisioned manually through the
+> console/CLI, and only `infrastructure/load_bronze.sh` and the BigQuery table
+> schemas are version-controlled. This was a sequencing decision — project-03
+> was built before the Terraform conventions used in projects 4-6 were
+> settled — and it is a known gap rather than a design choice. The dbt models
+> (which live in project-01's shared dbt project) and the Composer DAG *are*
+> fully version-controlled.
+
 ## Architecture
 
 GCS (raw CSVs)

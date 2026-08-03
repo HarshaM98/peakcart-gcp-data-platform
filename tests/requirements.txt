@@ -1,0 +1,14 @@
+# Dependencies for the DAG integrity tests only (tests/test_dag_integrity.py).
+#
+# Pinned to match Cloud Composer 2's Airflow 2 image line, so a DAG that parses
+# here parses there. If the Composer image version changes, change these to
+# match -- the whole point of these tests is fidelity to the deployed runtime.
+#
+# Install into an isolated venv, NOT alongside the Beam/dbt/Vertex environments:
+#   python3.11 -m venv ~/.venv/airflow-test-env
+#   source ~/.venv/airflow-test-env/bin/activate
+#   pip install -r tests/requirements.txt
+#   python3 -m unittest discover -s tests -v
+
+apache-airflow==2.11.1
+apache-airflow-providers-google==17.6.0

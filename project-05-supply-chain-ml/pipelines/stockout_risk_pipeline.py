@@ -96,10 +96,19 @@ def undeploy_existing_model(
     api_root = f"https://{location}-aiplatform.googleapis.com/v1"
     base = f"{api_root}/projects/{project_number}/locations/{location}"
 
+    # Every HTTP call sets an explicit timeout -- without one, `requests`
+    # blocks forever on a stalled connection, which inside a KFP component
+    # means the whole pipeline hangs with no progress and no error.
+    # These constants are declared inside the component (not at module level)
+    # because KFP packages each component as a self-contained function.
+    request_timeout = 30
+    operation_deadline = 1800  # 30 min; observed deploys take up to ~13 min
+
     list_resp = requests.get(
         f"{base}/endpoints",
         headers=headers,
         params={"filter": f'display_name="{endpoint_display_name}"'},
+        timeout=request_timeout,
     )
     list_resp.raise_for_status()
     existing_endpoints = list_resp.json().get("endpoints", [])
@@ -116,18 +125,28 @@ def undeploy_existing_model(
         print(f"Endpoint {endpoint['name']} exists but has nothing deployed.")
         return "nothing-deployed"
 
+    import time
+
     for deployed_id in deployed_model_ids:
         resp = requests.post(
             f"{base}/endpoints/{endpoint_id}:undeployModel",
             headers=headers,
             json={"deployedModelId": deployed_id},
+            timeout=request_timeout,
         )
         resp.raise_for_status()
         op_name = resp.json()["name"]
+        op_start = time.time()
         while True:
-            import time
+            if time.time() - op_start > operation_deadline:
+                raise TimeoutError(
+                    f"Undeploy operation {op_name} did not finish within "
+                    f"{operation_deadline}s"
+                )
 
-            r = requests.get(f"{api_root}/{op_name}", headers=headers)
+            r = requests.get(
+                f"{api_root}/{op_name}", headers=headers, timeout=request_timeout
+            )
             r.raise_for_status()
             body = r.json()
             if body.get("done"):
@@ -205,9 +224,27 @@ def deploy_model_without_explanations(
     api_root = f"https://{location}-aiplatform.googleapis.com/v1"
     base = f"{api_root}/projects/{project_number}/locations/{location}"
 
+    # Explicit timeouts on every call, and a deadline on the polling loop --
+    # without them a stalled Vertex operation hangs the pipeline indefinitely
+    # with no error. Declared inside the component because KFP packages each
+    # component as a self-contained function.
+    request_timeout = 30
+    operation_deadline = 1800  # 30 min; observed deploys take up to ~13 min
+
     def wait_for_operation(operation_name, poll_seconds):
+        started = time.time()
         while True:
-            r = requests.get(f"{api_root}/{operation_name}", headers=headers)
+            if time.time() - started > operation_deadline:
+                raise TimeoutError(
+                    f"Operation {operation_name} did not finish within "
+                    f"{operation_deadline}s"
+                )
+
+            r = requests.get(
+                f"{api_root}/{operation_name}",
+                headers=headers,
+                timeout=request_timeout,
+            )
             r.raise_for_status()
             body = r.json()
             if body.get("done"):
@@ -220,6 +257,7 @@ def deploy_model_without_explanations(
         f"{base}/endpoints",
         headers=headers,
         params={"filter": f'display_name="{endpoint_display_name}"'},
+        timeout=request_timeout,
     )
     list_resp.raise_for_status()
     existing_endpoints = list_resp.json().get("endpoints", [])
@@ -232,7 +270,10 @@ def deploy_model_without_explanations(
         print(f"Reusing existing endpoint {endpoint_name} (old deployed models: {old_deployed_model_ids})")
     else:
         create_resp = requests.post(
-            f"{base}/endpoints", headers=headers, json={"displayName": endpoint_display_name}
+            f"{base}/endpoints",
+            headers=headers,
+            json={"displayName": endpoint_display_name},
+            timeout=request_timeout,
         )
         create_resp.raise_for_status()
         endpoint = wait_for_operation(create_resp.json()["name"], poll_seconds=10)
@@ -259,7 +300,10 @@ def deploy_model_without_explanations(
         "trafficSplit": traffic_split,
     }
     deploy_resp = requests.post(
-        f"{base}/endpoints/{endpoint_id}:deployModel", headers=headers, json=deploy_body
+        f"{base}/endpoints/{endpoint_id}:deployModel",
+        headers=headers,
+        json=deploy_body,
+        timeout=request_timeout,
     )
     deploy_resp.raise_for_status()
     wait_for_operation(deploy_resp.json()["name"], poll_seconds=20)
@@ -270,6 +314,7 @@ def deploy_model_without_explanations(
             f"{base}/endpoints/{endpoint_id}:undeployModel",
             headers=headers,
             json={"deployedModelId": old_id},
+            timeout=request_timeout,
         )
         undeploy_resp.raise_for_status()
         wait_for_operation(undeploy_resp.json()["name"], poll_seconds=10)
