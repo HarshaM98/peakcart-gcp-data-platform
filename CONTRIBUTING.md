@@ -55,3 +55,10 @@ If you do open a PR, matching the existing conventions helps:
 Never commit generated data. `shared/data-generators/output/` is gitignored
 and should stay that way. The generators are deterministic (`SEED = 42`), so
 anyone can reproduce the same dataset.
+
+The one exception is `shared/data-generators/fixtures/`, which holds committed
+CSVs that are **not** generated and are copied into `output/` on each run.
+Currently that is `product_price_history.csv`, which has to stay byte-stable
+because it drives the SCD Type 2 date ranges and its row count is asserted as
+a quality gate. See the [fixtures README](shared/data-generators/fixtures/README.md)
+for the reasoning.

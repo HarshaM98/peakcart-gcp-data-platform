@@ -168,7 +168,8 @@ Each project follows the same layout: `infrastructure/terraform/`, code,
 git clone https://github.com/HarshaM98/peakcart-gcp-data-platform.git
 cd peakcart-gcp-data-platform
 
-# Generate the synthetic dataset (deterministic, no GCP needed)
+# Generate the synthetic dataset (deterministic, no GCP needed).
+# Run the core generator first -- the others depend on its output.
 python3.11 shared/data-generators/generate_peakcart_data.py
 python3.11 shared/data-generators/generate_project03_data.py
 python3.11 shared/data-generators/generate_project05_data.py

@@ -7,6 +7,7 @@ Includes deliberate data quality issues to test pipeline robustness.
 import csv
 import random
 import os
+import shutil
 from datetime import datetime, timedelta
 
 # ─── Configuration ───────────────────────────────────────────────────────────
@@ -16,6 +17,15 @@ random.seed(SEED)
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# product_price_history is a committed fixture rather than generated output.
+# It drives the SCD Type 2 chain in dim_products (effective-dated price
+# periods), and its 359 rows are asserted as a data-quality gate by
+# project-02's Composer DAG -- so it needs to be byte-stable across clones,
+# which a regenerated file would not be. It is copied into output/ below so
+# that everything downstream can keep reading from one directory.
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+FIXTURE_FILES = ["product_price_history.csv"]
 
 NUM_SUPPLIERS     = 20
 NUM_PRODUCTS      = 200
@@ -194,6 +204,27 @@ def write_csv(filename, rows):
         writer.writerows(rows)
     print(f"Written {len(rows):>6} rows --> {path}")
 
+
+def copy_fixtures():
+    """Copy committed fixture CSVs into output/ alongside generated files.
+
+    Runs after generation so that a single `python3 generate_peakcart_data.py`
+    leaves output/ complete and every downstream consumer (load_bronze.sh,
+    project-02's loader, the dbt sources) can read from one place.
+    """
+    for filename in FIXTURE_FILES:
+        src = os.path.join(FIXTURES_DIR, filename)
+        dst = os.path.join(OUTPUT_DIR, filename)
+        if not os.path.exists(src):
+            raise FileNotFoundError(
+                f"Missing fixture {src}. It is tracked in git -- if it is "
+                f"absent, the working tree is incomplete."
+            )
+        shutil.copyfile(src, dst)
+        with open(dst) as f:
+            n = sum(1 for _ in f) - 1  # minus header
+        print(f"Copied  {n:>6} rows --> {dst} (fixture)")
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -220,6 +251,8 @@ def main():
 
     inventory  = generate_inventory_snapshots(product_ids)
     write_csv("inventory_snapshots.csv", inventory)
+
+    copy_fixtures()
 
     print("\nDone. All files written to shared/data-generators/output/")
 

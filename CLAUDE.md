@@ -27,7 +27,9 @@ python3.11 shared/data-generators/generate_peakcart_data.py     # core dataset: 
 python3.11 shared/data-generators/generate_project03_data.py    # customer_360 dataset: customer_profiles, order_history, clickstream_events, delivery_feedback
 ```
 
-Both scripts use a fixed `SEED = 42` and write CSVs to `shared/data-generators/output/` (project-03 under `output/project-03/`). Deliberate data-quality issues (NULL emails, NULL supplier_id, negative quantities) are seeded intentionally — this is expected test data, not a bug.
+Both scripts use a fixed `SEED = 42` and write CSVs to `shared/data-generators/output/` (project-03 under `output/project-03/`). Deliberate data-quality issues (NULL emails, NULL supplier_id, negative quantities, ~1% duplicate `orders` rows via `intentional_duplicate()`) are seeded intentionally — this is expected test data, not a bug.
+
+**`product_price_history.csv` is a committed fixture, not generated.** It lives in `shared/data-generators/fixtures/` and `generate_peakcart_data.py` copies it into `output/` at the end of its run (`copy_fixtures()`), so a single generator invocation still leaves `output/` complete. It must stay byte-stable: it drives `dim_products`' SCD Type 2 effective-date ranges, and project-02's Composer DAG asserts exactly 359 rows as a quality gate. Do not regenerate or edit it casually — see `shared/data-generators/fixtures/README.md`.
 
 ### dbt (project-01, also used by project-03's `customer_360` models)
 
